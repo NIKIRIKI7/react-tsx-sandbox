@@ -1,34 +1,55 @@
-import { ModuleCache } from './cache';
+import { CdnResolver } from '../core/types';
 import { NetworkModuleError } from '../core/errors';
+import { ModuleCache } from './cache';
 
-export type ModuleImporter = (url: string) => Promise<any>;
+export type ModuleImporter = (url: string, signal?: AbortSignal) => Promise<any>;
 
-const defaultImporter: ModuleImporter = (url) => import(/* @vite-ignore */ url);
+export interface LoadModulesOptions {
+  importer?: ModuleImporter;
+  cdnResolver?: CdnResolver;
+  signal?: AbortSignal;
+}
+
+export const defaultCdnResolver: CdnResolver = (pkg: string) => `https://esm.sh/${pkg}`;
+
+export const defaultImporter: ModuleImporter = (url) =>
+  (new Function('u', 'return import(u)') as (u: string) => Promise<any>)(url);
 
 /**
  * Асинхронно подгружает отсутствующие пакеты через CDN.
  *
- * `importer` — точка внедрения (dependency injection) для тестов и
- * замены CDN-провайдера без изменения логики кэша.
+ * Третий аргумент — либо `ModuleImporter` (обратная совместимость),
+ * либо объект `LoadModulesOptions` с `cdnResolver`/`signal`.
  */
 export async function loadMissingModules(
   packages: string[],
   cache: ModuleCache,
-  importer: ModuleImporter = defaultImporter,
+  importerOrOptions: ModuleImporter | LoadModulesOptions = {},
 ): Promise<void> {
-  const loadPromises = packages.map(async (pkg) => {
-    if (cache.has(pkg)) return; // Уже в кэше (или это встроенная либа)
+  const options: LoadModulesOptions =
+    typeof importerOrOptions === 'function' ? { importer: importerOrOptions } : importerOrOptions;
 
-    try {
-      const module = await importer(`https://esm.sh/${pkg}`);
-      // Адаптируем ESM в формат, понятный CommonJS-require.
-      // `__esModule` нужен, чтобы Sucrase-интероп `_interopRequireDefault`
-      // не заворачивал модуль повторно и `default` резолвился напрямую.
-      cache.register(pkg, { ...module, default: module.default || module, __esModule: true });
-    } catch (error) {
-      throw new NetworkModuleError(pkg, (error as Error).message);
-    }
-  });
+  const importer = options.importer ?? defaultImporter;
+  const cdnResolver = options.cdnResolver ?? defaultCdnResolver;
+  const signal = options.signal;
 
-  await Promise.all(loadPromises);
+  const missing = packages.filter((pkg) => !cache.has(pkg));
+  if (missing.length === 0) return;
+
+  await Promise.all(
+    missing.map(async (pkg) => {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      try {
+        const resolvedUrl = cdnResolver(pkg);
+        const loaded = signal ? await importer(resolvedUrl, signal) : await importer(resolvedUrl);
+        // `__esModule` нужен, чтобы Sucrase-интероп `_interopRequireDefault`
+        // не заворачивал модуль повторно и `default` резолвился напрямую.
+        cache.register(pkg, { ...loaded, default: loaded.default || loaded, __esModule: true });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        throw new NetworkModuleError(pkg, (error as Error).message);
+      }
+    }),
+  );
 }

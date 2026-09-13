@@ -1,7 +1,7 @@
 import React from 'react';
-import { useLiveSandbox, CompiledComponentInfo, UseLiveSandboxOptions } from './useLiveSandbox';
-import { ModuleRegistry } from '../core/types';
-import { ModuleImporter } from '../library-manager/loader';
+import { ModuleRegistry, VirtualFileSystem } from '../core/types';
+import { SandboxErrorBoundary } from './ErrorBoundary';
+import { useLiveSandbox, UseLiveSandboxOptions } from './useLiveSandbox';
 
 export interface SandboxRenderContext {
   Component: React.ComponentType<any> | null;
@@ -11,38 +11,24 @@ export interface SandboxRenderContext {
 
 export interface SandboxErrorContext extends SandboxRenderContext {
   error: Error;
+  isRuntime?: boolean;
 }
 
-/**
- * Конфигурационный объект песочницы. Всё опционально, кроме `code`.
- * Компонент можно кастомизировать слотами (`render`, `renderLoading`,
- * `renderError`, `wrapper`) и контейнером (`className`, `style`).
- */
-export interface SandboxConfig {
-  /** TSX-код для компиляции и рендера. */
-  code: string;
-  /** Модули, доступные через `require`/`import` (react добавляется сам). */
+export interface SandboxConfig extends UseLiveSandboxOptions {
+  /** TSX-код (одиночный файл). */
+  code?: string;
+  /** Многофайловый вход: путь -> код. */
+  files?: VirtualFileSystem;
+  /** Модули, доступные через require/import (react добавляется сам). */
   modules?: ModuleRegistry;
-  /** Карта ассетов `имя -> URL` (blob:/data:/http) для `staticFile(...)`. */
+  /** Карта ассетов имя -> URL (blob:/data:/http) для staticFile(...). */
   assets?: Record<string, string>;
-  /** Кастомный загрузчик npm-пакетов (по умолчанию — esm.sh). */
-  importer?: ModuleImporter;
-  /** Классы контейнера. При наличии `className`/`style` контент оборачивается в `div`. */
   className?: string;
-  /** Инлайн-стили контейнера. */
   style?: React.CSSProperties;
-  /** Обёртка вокруг готового компонента. */
   wrapper?: React.ComponentType<{ children: React.ReactNode }>;
-  /** Полный контроль над рендером (перекрывает остальные слоты). */
   render?: (context: SandboxRenderContext) => React.ReactNode;
-  /** Рендер состояния загрузки (по умолчанию `null`). */
   renderLoading?: (context: SandboxRenderContext) => React.ReactNode;
-  /** Рендер ошибки (по умолчанию сообщение в `<pre>`). */
   renderError?: (context: SandboxErrorContext) => React.ReactNode;
-  /** Колбэк ошибки компиляции/загрузки. */
-  onError?: (error: Error) => void;
-  /** Колбэк успешной компиляции. */
-  onCompiled?: (info: CompiledComponentInfo) => void;
 }
 
 export interface SandboxProps {
@@ -54,30 +40,27 @@ const defaultErrorStyle: React.CSSProperties = {
   whiteSpace: 'pre-wrap',
   fontFamily: 'monospace',
   margin: 0,
+  padding: 12,
+  background: 'rgba(255, 107, 107, 0.08)',
+  borderRadius: 8,
 };
 
 /**
  * UI-компонент, который компилирует и рендерит произвольный TSX.
- *
- * ```tsx
- * import { Sandbox } from 'browser-tsx-sandbox';
- *
- * <Sandbox config={{ code: userTsx, className: 'preview', renderLoading: () => <Spinner /> }} />
- * ```
+ * Ошибки рендера изолируются внутренним ErrorBoundary.
  */
 export const Sandbox: React.FC<SandboxProps> = ({ config }) => {
-  const { Component, error, isCompiling } = useLiveSandbox(
-    config.code,
+  const input: string | VirtualFileSystem = config.files ?? config.code ?? '';
+
+  const { Component, error, isCompiling, runtimeError, setRuntimeError } = useLiveSandbox(
+    input,
     config.modules ?? {},
     config.assets ?? {},
-    {
-      importer: config.importer,
-      onError: config.onError,
-      onCompiled: config.onCompiled,
-    } satisfies UseLiveSandboxOptions,
+    config,
   );
 
-  const context: SandboxRenderContext = { Component, error, isCompiling };
+  const activeError = runtimeError ?? error;
+  const context: SandboxRenderContext = { Component, error: activeError, isCompiling };
 
   if (config.render) {
     return <>{config.render(context)}</>;
@@ -85,7 +68,7 @@ export const Sandbox: React.FC<SandboxProps> = ({ config }) => {
 
   if (error) {
     if (config.renderError) {
-      return <>{config.renderError({ ...context, error })}</>;
+      return <>{config.renderError({ ...context, error, isRuntime: false })}</>;
     }
     return (
       <pre className={config.className} style={{ ...defaultErrorStyle, ...config.style }}>
@@ -98,7 +81,27 @@ export const Sandbox: React.FC<SandboxProps> = ({ config }) => {
     return config.renderLoading ? <>{config.renderLoading(context)}</> : null;
   }
 
-  const content = config.wrapper ? <config.wrapper>{<Component />}</config.wrapper> : <Component />;
+  const rendered = <Component />;
+  const wrapped = config.wrapper ? <config.wrapper>{rendered}</config.wrapper> : rendered;
+
+  const content = (
+    <SandboxErrorBoundary
+      resetKey={input}
+      onError={(err) => {
+        setRuntimeError(err);
+        config.onError?.(err);
+      }}
+      fallback={(err) =>
+        config.renderError ? (
+          <>{config.renderError({ ...context, error: err, isRuntime: true })}</>
+        ) : (
+          <pre style={{ ...defaultErrorStyle, ...config.style }}>{err.message}</pre>
+        )
+      }
+    >
+      {wrapped}
+    </SandboxErrorBoundary>
+  );
 
   if (config.className || config.style) {
     return (

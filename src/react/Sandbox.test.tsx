@@ -56,7 +56,7 @@ describe('react/Sandbox (UI-компонент)', () => {
     );
 
     expect(await screen.findByText('from-cdn')).toBeTruthy();
-    expect(importer).toHaveBeenCalledWith('https://esm.sh/my-lib');
+    expect(importer).toHaveBeenCalledWith('https://esm.sh/my-lib', expect.anything());
   });
 
   it('показывает renderLoading до завершения компиляции', () => {

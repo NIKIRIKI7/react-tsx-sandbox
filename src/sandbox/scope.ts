@@ -12,6 +12,7 @@ export function getShadowedGlobals() {
     'XMLHttpRequest',
     'indexedDB',
     'navigator',
+    'WebSocket',
   ];
 
   const shadowValues = forbiddenKeys.map(() => undefined);

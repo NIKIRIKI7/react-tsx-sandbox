@@ -1,6 +1,6 @@
 {
   "name": "browser-tsx-sandbox",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Pure client-side TSX compiler and sandbox evaluator with dynamic NPM library loading.",
   "type": "module",
   "license": "MIT",
@@ -52,6 +52,8 @@
     "render:widgets:logo": "node render/render-widgets.mjs examples/vidora-widgets-logo.json",
     "render:props": "node render/render-props.mjs",
     "render:cdn": "node render/render-cdn.mjs",
+    "demo": "vite demo --open",
+    "demo:build": "vite build demo",
     "verify:video": "node render/verify-video.mjs",
     "typecheck": "tsc --noEmit"
   },
@@ -60,8 +62,8 @@
     "sucrase": "^3.35.0"
   },
   "peerDependencies": {
-    "react": ">=17",
-    "@remotion/player": ">=4"
+    "@remotion/player": ">=4",
+    "react": ">=17"
   },
   "peerDependenciesMeta": {
     "@remotion/player": {
@@ -86,6 +88,7 @@
     "tailwindcss": "^3.4.19",
     "tsup": "^8.5.1",
     "typescript": "^5.6.3",
+    "vite": "^5.4.21",
     "vitest": "^2.1.8"
   }
 }

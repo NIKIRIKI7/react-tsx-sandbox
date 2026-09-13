@@ -49,6 +49,8 @@ npm install
 | `npm run render:widgets:logo` | рендер каталога `examples/vidora-widgets-logo.json` |
 | `npm run render:props` | рендер вариаций пропсов (проверка, что параметры меняют результат) |
 | `npm run render:cdn` | рендер сцены с библиотеками, скачанными с esm.sh в браузере |
+| `npm run demo` | открыть demo-страницу с живым `<PlayerSandbox />` (Vite) |
+| `npm run demo:build` | собрать статику demo-страницы в `demo/dist` |
 | `npm run build` | сборка npm-пакета (`tsup` → `dist/`: ESM + CJS + типы) |
 | `npm run pack:check` | `npm pack --dry-run` — показать содержимое тарбола |
 | `npm run verify:video` | проверить выданный MP4 (контейнер, кодек, размеры, длительность) |
@@ -501,6 +503,101 @@ import { PlayerSandbox } from 'browser-tsx-sandbox/player';
 > **Рендер в файл** (`renderStill`/`renderMedia`) — по-прежнему офлайн в Node + Chrome; «смотреть прямо во время записи файла» нельзя, но Player даёт мгновенный предпросмотр рядом.
 
 Тест: `src/react/PlayerSandbox.test.tsx` (реальный `@remotion/player` в jsdom, включая `useCurrentFrame`).
+
+### Демо-страница
+
+```bash
+npm run demo        # vite demo --open — откроет страницу в браузере
+npm run demo:build  # статика в demo/dist
+```
+
+`demo/` — интерактивная песочница: слева редактор TSX, справа живой `<PlayerSandbox />`. Правишь код → «Compile & Preview» → результат сразу играет в Player (play/pause/seek). Компиляция идёт в браузере через сам пакет; `remotion` передаётся в `config.modules`.
+
+---
+
+## 🆕 Возможности v0.3.0
+
+- 🗂️ **Virtual File System (VFS):** вход `files: { '/App.tsx': '...', '/Button.tsx': '...' }` + `entry`, с относительными импортами `./` и `../`.
+- 🛡️ **Anti-freeze Loop Protection:** `while(true)`/долгие циклы прерываются `ExecutionTimeoutError` (`loopProtect`, `maxIterations`), не вешая вкладку.
+- 🧯 **Встроенный ErrorBoundary:** ошибки рендера не роняют хост-UI, а уходят в `renderError({ error, isRuntime: true })`.
+- ⚡ **Debounce + AbortSignal:** `debounceMs` для Monaco/CodeMirror и отмена устаревших компиляций/загрузок.
+- 🌐 **Pluggable CDN и компилятор:** `cdnResolver`, `compiler: CompilerAdapter`, `importer`.
+- 🧵 **Web Worker компиляция:** `WorkerCompilerAdapter` (Sucrase в воркере, fallback на main thread).
+- 💡 **Type Definitions Helper:** `getSandboxTypeDefinitions()` для автодополнения в Monaco/CodeMirror.
+- 🔌 **Pipeline-плагины:** `plugins: [{ name, beforeCompile, afterCompile }]` для кастомной обработки файлов.
+- 🧭 **Фазы ошибок:** `EvaluationResult.errorPhase` (`compiler` / `network` / `security` / `timeout` / `runtime`) и координаты ошибки (`line`, `column`, `snippet`).
+
+```tsx
+import { Sandbox } from 'browser-tsx-sandbox';
+
+<Sandbox
+  config={{
+    files: {
+      '/Button.tsx': `export const Button = () => <button>Click</button>;`,
+      '/App.tsx': `
+        import { Button } from './Button';
+        export default () => <div><Button /></div>;
+      `,
+    },
+    entry: '/App.tsx',
+    debounceMs: 250,
+    loopProtect: true,
+    maxIterations: 500_000,
+    cdnResolver: (pkg) => `https://esm.sh/${pkg}`,
+    renderError: ({ error, isRuntime }) => <pre>{isRuntime ? 'Runtime' : 'Compile'}: {error.message}</pre>,
+  }}
+/>
+```
+
+---
+
+## 🎬 Видеостудия: надёжность и кастомизация плеера (v0.4.0)
+
+Пакет `browser-tsx-sandbox/player` получил инструменты уровня видеоредактора (CapCut/Premiere/Figma).
+
+**Developer UX**
+- **Smart Frame Retention** — при рекомпиляции кода плеер сохраняет текущий кадр и состояние play (`smartFrameRetention`, по умолчанию `true`).
+- **Императивный `PlayerSandboxRef`:** `seekTo`, `getCurrentFrame`, `play/pause/toggle`, `takeSnapshot`, `resetZoomPan`, `getActiveDelayHandles`, `getRemotionPlayerRef`.
+- **Snapshot кадра в браузере** (`takeSnapshot`) — Zero-Backend экспорт постера.
+- **Headless compound UI:** `PlayerSandbox.Root / .PlayButton / .TimeDisplay / .Timeline / .VolumeControl / .Guides` — собственный интерфейс через `PlayerContext`/`usePlayerContext`.
+
+**Надёжность**
+- **delayRender Watchdog** (`delayRenderTimeoutMs`) — принудительно снимает зависшую блокировку кадра (`createRemotionWatchdog`).
+- **WebGL Context Guard** (`cleanupCanvasWebGl`) — высвобождает контексты при размонтировании (Three.js/Pixi).
+- **Safe Zones Overlay** — `tiktok-9x16`, `reels-9x16`, `shorts-9x16`, `tv-safe-16x9`, `rule-of-thirds`, `center-cross`.
+- **Studio Canvas** — `canvasControls: { zoom, pan, minZoom, maxZoom }` (Ctrl+Wheel зум, Shift+Drag пан).
+
+```tsx
+import { PlayerSandbox } from 'browser-tsx-sandbox/player';
+import type { PlayerSandboxRef } from 'browser-tsx-sandbox/player';
+
+const ref = useRef<PlayerSandboxRef>(null);
+
+<PlayerSandbox
+  ref={ref}
+  config={{
+    code,
+    modules: { remotion: Remotion },
+    durationInFrames: 300,
+    fps: 30,
+    width: 1080,
+    height: 1920,
+    safeZone: ['tiktok-9x16', 'rule-of-thirds'],
+    canvasControls: { enabled: true, minZoom: 0.25, maxZoom: 4 },
+    smartFrameRetention: true,
+    delayRenderTimeoutMs: 4000,
+  }}
+/>;
+
+const png = await ref.current?.takeSnapshot({ format: 'image/png' });
+ref.current?.seekTo(142);
+```
+
+**Демо-страницы** (`npm run demo` открывает Player, `/studio.html` — студию):
+- `demo/index.html` — редактор TSX + живой Player.
+- `demo/studio.html` — Smart Frame Retention, ref-API, захват кадра, safe zones, зум, headless-тулбар.
+
+> **Ограничение `takeSnapshot`:** если в сцене есть `<canvas>` (WebGL/2D), возвращается настоящий PNG/JPEG. Для чисто DOM-сцен браузер помечает canvas как *tainted* при `foreignObject`, поэтому возвращается SVG data-URL (рендерится как изображение; для пиксельного PNG используйте canvas-сцены или `modern-screenshot`).
 
 ---
 

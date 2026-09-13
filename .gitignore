@@ -10,6 +10,7 @@ render/bundle-props/
 render/bundle-cdn/
 render/.generated/
 render/public/
+demo/dist/
 *.log
 *.tgz
 .DS_Store

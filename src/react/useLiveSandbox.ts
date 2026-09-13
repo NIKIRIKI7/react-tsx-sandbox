@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { SandboxFacade } from '../facade';
-import { ModuleRegistry } from '../core/types';
-import { ModuleImporter } from '../library-manager/loader';
+import { useEffect, useRef, useState } from 'react';
+import { SandboxFacade, SandboxFacadeOptions } from '../facade';
+import { ModuleRegistry, VirtualFileSystem } from '../core/types';
+import { RuntimeRenderError } from '../core/errors';
 import * as React from 'react';
 
 export interface CompiledComponentInfo {
@@ -9,12 +9,14 @@ export interface CompiledComponentInfo {
   executionTimeMs: number;
 }
 
-export interface UseLiveSandboxOptions {
-  /** Кастомный загрузчик npm-пакетов (по умолчанию — esm.sh). */
-  importer?: ModuleImporter;
-  /** Вызывается при ошибке компиляции/загрузки. */
+export interface UseLiveSandboxOptions extends SandboxFacadeOptions {
+  /** Задержка перед компиляцией (для Monaco/CodeMirror). По умолчанию 0. */
+  debounceMs?: number;
+  /** Точка входа VFS. По умолчанию `/App.tsx`. */
+  entry?: string;
+  /** Колбэк ошибки компиляции/загрузки. */
   onError?: (error: Error) => void;
-  /** Вызывается после успешной компиляции. */
+  /** Колбэк успешной компиляции. */
   onCompiled?: (info: CompiledComponentInfo) => void;
 }
 
@@ -22,81 +24,94 @@ export interface UseLiveSandboxResult {
   Component: React.ComponentType<any> | null;
   error: Error | null;
   isCompiling: boolean;
+  runtimeError: RuntimeRenderError | Error | null;
+  setRuntimeError: (error: RuntimeRenderError | Error | null) => void;
 }
 
 /**
- * Готовый React-хук для бесшовной интеграции песочницы.
- *
- * Внимание: `localAssets` не должен попадать в зависимости эффекта по ссылке —
- * иначе новый объект на каждый рендер запускает бесконечный цикл рекомпиляции.
- * Поэтому мы сравниваем сериализованный ключ ассетов. Колбэки и импортёр
- * читаются через ref, чтобы не пересоздавать эффект.
+ * React-хук песочницы: компилирует код (или VFS) с дебаунсом и отменой
+ * устаревших компиляций через AbortController.
  */
 export function useLiveSandbox(
-  code: string,
-  initialModules: ModuleRegistry,
+  codeOrFiles: string | VirtualFileSystem,
+  initialModules: ModuleRegistry = {},
   localAssets: Record<string, string> = {},
   options: UseLiveSandboxOptions = {},
 ): UseLiveSandboxResult {
   const facadeRef = useRef<SandboxFacade | null>(null);
-  const assetsRef = useRef(localAssets);
-  assetsRef.current = localAssets;
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [isCompiling, setIsCompiling] = useState(false);
-
-  // Инициализация фасада (единожды)
   if (!facadeRef.current) {
-    // Автоматически добавляем React, если его забыли
-    const modules = { react: React, ...initialModules };
-    facadeRef.current = new SandboxFacade(modules, options.importer);
+    facadeRef.current = new SandboxFacade(
+      { react: React, ...initialModules },
+      {
+        compiler: options.compiler,
+        cdnResolver: options.cdnResolver,
+        importer: options.importer,
+        loopProtect: options.loopProtect,
+        maxIterations: options.maxIterations,
+        plugins: options.plugins,
+      },
+    );
   }
 
-  const assetsKey = JSON.stringify(localAssets);
+  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [runtimeError, setRuntimeError] = useState<RuntimeRenderError | Error | null>(null);
+  const [isCompiling, setIsCompiling] = useState(true);
+
+  const inputKey = typeof codeOrFiles === 'string' ? codeOrFiles : JSON.stringify(codeOrFiles);
+  const assetsKey = JSON.stringify(localAssets ?? {});
+  const debounceMs = options.debounceMs ?? 0;
 
   useEffect(() => {
-    if (!code) return;
+    const facade = facadeRef.current!;
+    facade.setAssets(localAssets ?? {});
 
     let isMounted = true;
+    const controller = new AbortController();
     setIsCompiling(true);
+    setRuntimeError(null);
 
-    facadeRef.current!.setAssets(assetsRef.current);
+    const timer = setTimeout(() => {
+      facade
+        .compile(codeOrFiles, { signal: controller.signal, entry: optionsRef.current.entry })
+        .then((result) => {
+          if (!isMounted || controller.signal.aborted) return;
 
-    facadeRef.current!
-      .compile(code)
-      .then((result) => {
-        if (!isMounted) return;
-
-        if (result.error) {
-          setError(result.error);
+          if (result.error) {
+            setError(result.error);
+            setComponent(null);
+            optionsRef.current.onError?.(result.error);
+          } else if (result.component) {
+            setError(null);
+            setComponent(() => result.component);
+            optionsRef.current.onCompiled?.({
+              component: result.component,
+              executionTimeMs: result.executionTimeMs,
+            });
+          }
+        })
+        .catch((err: unknown) => {
+          if (!isMounted || controller.signal.aborted) return;
+          const normalized = err instanceof Error ? err : new Error(String(err));
+          setError(normalized);
           setComponent(null);
-          optionsRef.current.onError?.(result.error);
-        } else {
-          setError(null);
-          setComponent(() => result.component);
-          optionsRef.current.onCompiled?.({
-            component: result.component,
-            executionTimeMs: result.executionTimeMs,
-          });
-        }
-        setIsCompiling(false);
-      })
-      .catch((err: Error) => {
-        if (!isMounted) return;
-        setError(err);
-        setComponent(null);
-        optionsRef.current.onError?.(err);
-        setIsCompiling(false);
-      });
+          optionsRef.current.onError?.(normalized);
+        })
+        .finally(() => {
+          if (isMounted) setIsCompiling(false);
+        });
+    }, debounceMs);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
+      controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, assetsKey]);
+  }, [inputKey, assetsKey, debounceMs]);
 
-  return { Component, error, isCompiling };
+  return { Component, error, isCompiling, runtimeError, setRuntimeError };
 }

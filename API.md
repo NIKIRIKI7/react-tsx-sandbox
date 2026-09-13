@@ -77,39 +77,55 @@ npm install @remotion/player
 
 ```ts
 export { SandboxFacade } from './facade';
+export type { SandboxFacadeOptions } from './facade';
+
 export { useLiveSandbox } from './react/useLiveSandbox';
-export type {
-  UseLiveSandboxOptions,
-  UseLiveSandboxResult,
-  CompiledComponentInfo,
-} from './react/useLiveSandbox';
+export type { UseLiveSandboxOptions, UseLiveSandboxResult, CompiledComponentInfo } from './react/useLiveSandbox';
 export { Sandbox } from './react/Sandbox';
-export type {
-  SandboxConfig,
-  SandboxProps,
-  SandboxRenderContext,
-  SandboxErrorContext,
-} from './react/Sandbox';
+export type { SandboxConfig, SandboxProps, SandboxRenderContext, SandboxErrorContext } from './react/Sandbox';
+export { SandboxErrorBoundary } from './react/ErrorBoundary';
+export type { SandboxErrorBoundaryProps } from './react/ErrorBoundary';
 
 export { ModuleCache } from './library-manager/cache';
-export { loadMissingModules } from './library-manager/loader';
-export type { ModuleImporter } from './library-manager/loader';
+export { loadMissingModules, defaultCdnResolver, defaultImporter } from './library-manager/loader';
+export type { ModuleImporter, LoadModulesOptions } from './library-manager/loader';
 
-export { extractBareImports } from './compiler/analyzer';
-export { compileTsx } from './compiler/transform';
+export { extractBareImports, scanImports, resolveVfsPath, stripComments } from './compiler/analyzer';
+export type { ScanResult } from './compiler/analyzer';
+export { compileTsx, SucraseCompilerAdapter, cleanMarkdownFences } from './compiler/transform';
+export { injectLoopProtection } from './compiler/loop-protect';
+export { getSandboxTypeDefinitions } from './compiler/types-helper';
 
 export { executeComponent } from './sandbox/evaluator';
+export type { EvaluatorContext } from './sandbox/evaluator';
 export { getShadowedGlobals } from './sandbox/scope';
+
+export { WorkerCompilerAdapter, createCompilerWorker } from './worker/WorkerCompilerAdapter';
 
 export { extractAssetZip, createAssetUrlMap, releaseAssetUrls } from './assets/zip';
 export type { AssetArchive } from './assets/zip';
+
+export { createRemotionWatchdog } from './sandbox/watchdog';
+export { cleanupCanvasWebGl } from './sandbox/webgl-guard';
+export { takeContainerSnapshot } from './sandbox/snapshot';
+export { SafeZonesOverlay } from './react/guides/SafeZonesOverlay';
+export { PlayerContext, usePlayerContext } from './react/headless/PlayerContext';
+export { PlayPauseButton, TimeDisplay, TimelineBar, VolumeControl } from './react/headless/Primitives';
 
 export * from './core/types';
 export * from './core/errors';
 
 // subpath: browser-tsx-sandbox/player (требует @remotion/player)
 export { PlayerSandbox } from './react/PlayerSandbox';
-export type { PlayerSandboxConfig, PlayerSandboxProps } from './react/PlayerSandbox';
+export type {
+  PlayerSandboxConfig,
+  PlayerSandboxProps,
+  PlayerSandboxRef,
+  CanvasControlsConfig,
+} from './react/PlayerSandbox';
+export { SafeZonesOverlay } from './react/guides/SafeZonesOverlay';
+export { PlayerContext, usePlayerContext } from './react/headless/PlayerContext';
+export { PlayPauseButton, TimeDisplay, TimelineBar, VolumeControl } from './react/headless/Primitives';
 ```
 
 ---
@@ -695,7 +711,7 @@ node render/render-widgets.mjs examples/vidora-widgets-logo.json
 
 | Команда | Что проверяет |
 |---|---|
-| `npm test` | Юнит-тесты (92 теста): analyzer, transform, cache, loader, scope, evaluator, errors, zip, facade, `useLiveSandbox`, `Sandbox`, `PlayerSandbox` |
+| `npm test` | Юнит-тесты (134 теста): analyzer, transform, loop-protect, cache, loader, scope, evaluator, errors, zip, facade, `useLiveSandbox`, `Sandbox`, `PlayerSandbox`, worker, watchdog, webgl-guard, snapshot, safe zones, types-helper |
 | `npm run test:e2e` | E2E: реальный рендер через Remotion + Chrome (без ассетов, с ZIP, пример, виджеты, пропсы) |
 | `npm run test:network` | Сетевые тесты: реальная загрузка библиотек с esm.sh (d3, three, canvas-confetti, framer-motion) |
 | `npm run verify:video` | Проверка выданного MP4: контейнер (`ftyp`/`moov`), кодек `avc1`, размеры, длительность, сверка с `ffprobe` |
@@ -788,4 +804,277 @@ interface Mp4Metadata {
 
 ### 18.4 Игнорируемые артефакты
 
-`.gitignore`: `node_modules/`, `dist/`, `coverage/`, `render/out/`, `render/bundle*/`, `render/.generated/`, `render/public/`, `*.log`, `*.tgz`.
+`.gitignore`: `node_modules/`, `dist/`, `coverage/`, `render/out/`, `render/bundle*/`, `render/.generated/`, `render/public/`, `demo/dist/`, `*.log`, `*.tgz`.
+
+---
+
+## 19. Расширения v0.3.0
+
+### 19.1 Virtual File System (VFS)
+
+`SandboxFacade.compile(input, { entry })` и `<Sandbox config={{ files, entry }} />` принимают `string | VirtualFileSystem`. Относительные импорты (`./`, `../`, `/`) резолвятся внутри VFS с подбором расширений и `index.*`.
+
+```ts
+function scanImports(code: string): {
+  bareImports: string[];
+  localImports: string[];
+  dynamicImports: string[];
+};
+function resolveVfsPath(currentFile, specifier, vfs): string | null;
+```
+
+`scanImports` устойчив к комментариям (`//`, `/* */`) и распознаёт динамические `import('...')`.
+
+### 19.2 Anti-freeze Loop Protection
+
+```ts
+function injectLoopProtection(code: string, maxIterations = 500_000): string;
+```
+
+Оборачивает тела `for`/`while`/`do` счётчиком; при превышении бросает ошибку с `name = 'ExecutionTimeoutError'`. Управляется `loopProtect` (по умолчанию `true`) и `maxIterations`.
+
+### 19.3 Ошибки и фазы
+
+```ts
+type ErrorPhase = 'compiler' | 'security' | 'network' | 'runtime' | 'timeout';
+interface EvaluationResult<T> { component; error; executionTimeMs; errorPhase?: ErrorPhase }
+
+class CompilerError extends Error { line?; column?; snippet? }
+class ExecutionTimeoutError extends Error { limit }
+class RuntimeRenderError extends Error { cause?; componentStack? }
+
+function isExecutionTimeoutError(e): boolean;
+function isSandboxPassthroughError(e): boolean;
+function getErrorPhase(e): ErrorPhase;
+```
+
+### 19.4 `SandboxErrorBoundary`
+
+```tsx
+<SandboxErrorBoundary
+  fallback={(error: Error) => ReactNode}
+  onError={(error: Error) => void}
+  resetKey={value}
+>
+  {children}
+</SandboxErrorBoundary>
+```
+
+`<Sandbox>`/`<PlayerSandbox>` оборачивают рендер boundary автоматически. Ошибки компиляции → `renderError({ isRuntime: false })`, ошибки рендера → `renderError({ isRuntime: true })`. `ExecutionTimeoutError`/`SecurityError` пробрасываются без обёртки в `RuntimeRenderError`.
+
+### 19.5 `useLiveSandbox` (обновление)
+
+```ts
+interface UseLiveSandboxOptions extends SandboxFacadeOptions {
+  debounceMs?: number;
+  entry?: string;
+  onError?: (error: Error) => void;
+  onCompiled?: (info: CompiledComponentInfo) => void;
+}
+interface UseLiveSandboxResult {
+  Component; error; isCompiling;
+  runtimeError: Error | null;
+  setRuntimeError: (error: Error | null) => void;
+}
+useLiveSandbox(codeOrFiles: string | VirtualFileSystem, modules?, assets?, options?)
+```
+
+Компиляция выполняется с дебаунсом и `AbortController` — устаревшие компиляции и сетевые загрузки отменяются.
+
+### 19.6 `SandboxFacade` (обновление)
+
+```ts
+new SandboxFacade(initialRegistry?, importerOrOptions?: ModuleImporter | SandboxFacadeOptions)
+
+interface SandboxFacadeOptions {
+  compiler?: CompilerAdapter;
+  cdnResolver?: CdnResolver;
+  importer?: ModuleImporter;
+  loopProtect?: boolean;
+  maxIterations?: number;
+  plugins?: PipelinePlugin[];
+}
+
+compile(input: string | VirtualFileSystem, options?: CompileOptions): Promise<EvaluationResult>;
+registerModule(name: string, module: any): void;
+```
+
+`PipelinePlugin.beforeCompile/afterCompile` выполняется для каждого файла. Старая сигнатура `new SandboxFacade(registry, importerFn)` сохранена.
+
+### 19.7 Загрузчик / CDN
+
+```ts
+function loadMissingModules(
+  packages: string[],
+  cache: ModuleCache,
+  importerOrOptions?: ModuleImporter | LoadModulesOptions,
+): Promise<void>;
+
+interface LoadModulesOptions { importer?; cdnResolver?; signal? }
+const defaultCdnResolver: (pkg: string) => string; // https://esm.sh/<pkg>
+```
+
+### 19.8 Персистентный кэш
+
+```ts
+new ModuleCache(initialModules?: ModuleRegistry);
+cache.loadFromIndexedDb(key): Promise<string | null>;
+cache.saveToIndexedDb(key, value): Promise<void>;
+cache.clear(): void;
+```
+
+Без `indexedDB` (Node/SSR) методы персистентности — no-op.
+
+### 19.9 Web Worker компиляция
+
+```ts
+new WorkerCompilerAdapter(worker: Worker | null = createCompilerWorker());
+adapter.isWorker: boolean;
+adapter.transform(code, filepath): Promise<string>;
+adapter.dispose(): void;
+createCompilerWorker(): Worker | null;
+```
+
+В браузере Sucrase выполняется в inline module-worker; при отсутствии `Worker` — прозрачный fallback на главный поток. Подключается через `SandboxFacadeOptions.compiler`.
+
+### 19.10 Компилятор и типы
+
+```ts
+interface CompilerAdapter { name: string; transform(code, filepath): Promise<string> | string }
+class SucraseCompilerAdapter implements CompilerAdapter
+compileTsx(code, filename?): string   // CompilerError с line/column/snippet
+
+function getSandboxTypeDefinitions(): { filename: string; content: string }[];
+```
+
+### 19.11 Обновлённый поток данных
+
+```
+files/code ──▶ SandboxFacade
+                 ├─ plugins.beforeCompile
+                 ├─ injectLoopProtection
+                 ├─ scanImports → loadMissingModules (cdnResolver / importer / signal, ModuleCache + IndexedDB)
+                 ├─ compiler (Sucrase | Worker | custom) + plugins.afterCompile
+                 └─ executeComponent (VFS graph) → Component
+Component ──▶ <Sandbox> / <PlayerSandbox> ──▶ SandboxErrorBoundary ──▶ renderError({ isRuntime })
+```
+
+---
+
+## 20. Studio: надёжность и кастомизация плеера (v0.4.0)
+
+### 20.1 `PlayerSandbox` (subpath `browser-tsx-sandbox/player`)
+
+`forwardRef`-компонент. `config` = `SandboxConfig` + поля плеера.
+
+```ts
+interface PlayerSandboxConfig extends SandboxConfig {
+  durationInFrames?: number; // 300
+  fps?: number;              // 30
+  width?: number;            // 1920
+  height?: number;           // 1080
+  controls?: boolean;        // true
+  loop?: boolean;
+  autoPlay?: boolean;
+  inputProps?: Record<string, unknown>;
+  playerProps?: Partial<PlayerPropsWithoutZod<Record<string, unknown>>>;
+  smartFrameRetention?: boolean;   // true
+  delayRenderTimeoutMs?: number;   // 4000
+  safeZone?: SafeZonePreset | SafeZonePreset[];
+  canvasControls?: { enabled?: boolean; minZoom?: number; maxZoom?: number; initialZoom?: number };
+}
+
+interface PlayerSandboxProps {
+  config: PlayerSandboxConfig;
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+}
+```
+
+**Smart Frame Retention.** При перекомпиляции кода сохраняются текущий кадр и состояние play: после появления нового компонента вызывается `player.seekTo(previousFrame)` и, если проигрывалось, `player.play()`.
+
+### 20.2 `PlayerSandboxRef` (императивный API)
+
+```ts
+interface PlayerSandboxRef {
+  seekTo: (frame: number) => void;
+  getCurrentFrame: () => number;
+  isPlaying: () => boolean;
+  play: () => void;
+  pause: () => void;
+  toggle: () => void;
+  takeSnapshot: (options?: SnapshotOptions) => Promise<string>;
+  getActiveDelayHandles: () => string[];
+  getRemotionPlayerRef: () => PlayerRef | null;
+  resetZoomPan: () => void;
+}
+```
+
+### 20.3 Headless Compound UI
+
+```tsx
+<PlayerSandbox.Root config={config}>
+  <PlayerSandbox.PlayButton />
+  <PlayerSandbox.TimeDisplay format="both" />   {/* 'frames' | 'time' | 'both' */}
+  <PlayerSandbox.Timeline />
+  <PlayerSandbox.VolumeControl />
+  <PlayerSandbox.Guides preset="tiktok-9x16" />
+</PlayerSandbox.Root>
+```
+
+Доступ к состоянию — `usePlayerContext()` (`PlayerContextValue`): `currentFrame`, `durationInFrames`, `fps`, `isPlaying`, `zoom`, `pan`, `seekTo`, `play/pause/toggle`, `setVolume`, `toggleMute`, `setZoom`, `setPan`, `resetZoomPan`, `takeSnapshot`.
+
+> Headless-компоненты обязаны находиться внутри `PlayerSandbox.Root` — иначе `usePlayerContext` бросит ошибку.
+
+### 20.4 Watchdog `delayRender`
+
+```ts
+function createRemotionWatchdog(
+  remotionModule: unknown,
+  timeoutMs?: number,               // 4000
+  onTimeout?: (label?: string, handleId?: number) => void,
+): { proxiedRemotion; getActiveHandles(); clearAllTimeouts() };
+```
+
+`PlayerSandbox` автоматически оборачивает `config.modules.remotion`, поэтому `delayRender()` без `continueRender()` снимается по таймауту (с warning), а `getActiveDelayHandles()` показывает висящие блокировки.
+
+### 20.5 WebGL Guard
+
+```ts
+function cleanupCanvasWebGl(container: HTMLElement | null): number;
+```
+
+Вызывается при размонтировании `PlayerSandbox`, высвобождая контексты (`WEBGL_lose_context`).
+
+### 20.6 Snapshot
+
+```ts
+function takeContainerSnapshot(container, options?: SnapshotOptions): Promise<string>;
+interface SnapshotOptions { format?: 'image/png'|'image/jpeg'|'image/webp'; quality?: number; scale?: number }
+```
+
+Порядок: `<canvas>` → растеризация DOM (`foreignObject`) → SVG data-URL (если браузер пометил canvas как *tainted*). Для пиксельного PNG используйте canvas-сцены.
+
+### 20.7 Safe Zones
+
+```ts
+type SafeZonePreset =
+  | 'tiktok-9x16' | 'reels-9x16' | 'shorts-9x16'
+  | 'tv-safe-16x9' | 'rule-of-thirds' | 'center-cross';
+
+function SafeZonesOverlay(props: SafeZonesOverlayProps): JSX.Element;
+```
+
+### 20.8 Canvas Zoom & Pan
+
+При `canvasControls.enabled`:
+- `Ctrl`/`Cmd` + Wheel — зум в диапазоне `[minZoom, maxZoom]`;
+- `Shift`+Drag или средняя кнопка — панорамирование;
+- `ref.resetZoomPan()` — сброс.
+
+### 20.9 Демо
+
+- `npm run demo` → редактор TSX + Player (`demo/index.html`).
+- `/studio.html` → Smart Frame Retention, ref-API, snapshot, safe zones, зум, headless-тулбар (`demo/studio.html`).
+- `npm run demo:build` собирает обе страницы в `demo/dist`.
