@@ -335,6 +335,19 @@ function loadMissingModules(
 
 Стандартный импортёр — `import(/* @vite-ignore */ url)`; в тестах/других средах можно передать свой.
 
+### 10.3 Загрузка с CDN в разных средах
+
+| Среда | Загрузчик | Механика |
+|---|---|---|
+| Браузер | дефолтный | нативный `import('https://esm.sh/<pkg>')`; зависимости ESM резолвятся относительно esm.sh |
+| Node | пользовательский | `https`-импорт не поддерживается; адаптер качает `https://esm.sh/<pkg>?bundle` (самодостаточный ESM) и импортирует из временного файла |
+| Remotion-бандл | `(url) => new Function('u','return import(u)')(url)` | `new Function` экранирует webpack, чтобы выполнился нативный `import()` |
+
+Особенности:
+
+- Пакеты с внешним React (`framer-motion`) при загрузке ссылаются на `react`/`jsx-runtime` как на внешние зависимости. В браузере для рендера нужен общий React-инстанс (import map / `?external=react`), в Node-тесте достаточно факта загрузки.
+- `?bundle` у esm.sh делает бандл самодостаточным (кроме явных external). Адаптер проверяет отсутствие остаточных абсолютных импортов.
+
 ---
 
 ## 11. Sandbox (изоляция и выполнение)
@@ -566,6 +579,7 @@ node render/render-widgets.mjs examples/vidora-widgets-logo.json
 |---|---|
 | `npm test` | Юнит-тесты (77 тестов): analyzer, transform, cache, loader, scope, evaluator, errors, zip, facade, `useLiveSandbox` |
 | `npm run test:e2e` | E2E: реальный рендер через Remotion + Chrome (без ассетов, с ZIP, пример, виджеты, пропсы) |
+| `npm run test:network` | Сетевые тесты: реальная загрузка библиотек с esm.sh (d3, three, canvas-confetti, framer-motion) |
 | `npm run verify:video` | Проверка выданного MP4: контейнер (`ftyp`/`moov`), кодек `avc1`, размеры, длительность, сверка с `ffprobe` |
 | `npm run typecheck` | `tsc --noEmit` |
 

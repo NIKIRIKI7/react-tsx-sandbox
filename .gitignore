@@ -7,6 +7,7 @@ render/bundle-assets/
 render/bundle-example/
 render/bundle-widgets/
 render/bundle-props/
+render/bundle-cdn/
 render/.generated/
 render/public/
 *.log

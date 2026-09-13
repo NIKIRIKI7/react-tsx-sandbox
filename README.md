@@ -39,12 +39,14 @@ npm install
 | `npm test` | один прогон всех тестов (Vitest) |
 | `npm run test:watch` | тесты в режиме наблюдения (watch) |
 | `npm run test:e2e` | e2e-тест реального рендера видео (Remotion + Chrome) |
+| `npm run test:network` | сетевые тесты: реальная загрузка библиотек с esm.sh |
 | `npm run render` | вручную отрендерить PNG-кадр и MP4 из сцены песочницы |
 | `npm run render:assets` | то же, но с медиа-ассетами, распакованными из ZIP |
 | `npm run render:example` | рендер реальной анимации из `examples/remotion-scene.tsx` |
 | `npm run render:widgets` | рендер виджетов из JSON-каталога `examples/vidora-widgets.json` |
 | `npm run render:widgets:logo` | рендер каталога `examples/vidora-widgets-logo.json` |
 | `npm run render:props` | рендер вариаций пропсов (проверка, что параметры меняют результат) |
+| `npm run render:cdn` | рендер сцены с библиотеками, скачанными с esm.sh в браузере |
 | `npm run build` | сборка npm-пакета (`tsup` → `dist/`: ESM + CJS + типы) |
 | `npm run pack:check` | `npm pack --dry-run` — показать содержимое тарбола |
 | `npm run verify:video` | проверить выданный MP4 (контейнер, кодек, размеры, длительность) |
@@ -395,6 +397,26 @@ function PreviewPipeline() {
   return <RemotionPlayer component={Component} {...playerSettings} />;
 }
 ```
+---
+
+## 🌐 Живая загрузка библиотек с CDN
+
+Ключевая фича: если TSX импортирует пакет, которого нет в реестре, `SandboxFacade` скачивает его с `esm.sh` и подключает как `require`, без сборки бандла на сервере.
+
+- **Браузер:** дефолтный загрузчик делает нативный `import('https://esm.sh/<pkg>')`. Библиотека и её зависимости — ESM; для React-библиотек (например, `framer-motion`) `esm.sh` оставляет `react` внешним.
+- **Node:** нативные `https`-импорты не поддерживаются, поэтому в тестах используется адаптер: качает `?bundle` (самодостаточный ESM) и импортирует из временного файла.
+
+Проверки:
+
+```bash
+npm run test:network   # Node: d3, three, canvas-confetti — реально скачаны и выполнены
+npm run render:cdn     # Chrome: d3 и three импортированы с esm.sh во время рендера кадра
+```
+
+Результат `render:cdn`: `cdn-libs.png` (17 КБ) и `cdn-libs.mp4` — валидный H.264 `640×360`, 60 кадров, `2.0s`, `valid: true`.
+
+> `framer-motion` скачивается (shim + bundle), но для рендера ему нужен общий с React-инстанс — в браузере это решается import-map/алиасингом (`?external=react`).
+
 ---
 
 ## 📦 Сборка и публикация пакета
