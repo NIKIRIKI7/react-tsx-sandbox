@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/player.ts'],
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,
@@ -9,5 +9,5 @@ export default defineConfig({
   target: 'es2020',
   platform: 'neutral',
   treeshake: true,
-  external: ['react', 'react-dom', 'sucrase', 'fflate'],
+  external: ['react', 'react-dom', 'sucrase', 'fflate', '@remotion/player'],
 });

@@ -16,6 +16,8 @@
 - 🧩 **Локальные ассеты:** Поддержка Drag & Drop медиафайлов через `Blob API` и `URL.createObjectURL` без загрузки на сервер.
 - 🛡️ **Изоляция и Безопасность:** Безопасное выполнение сгенерированного ИИ кода (Shadowing глобальных переменных).
 - 🪄 **Интеграция Lucide Icons:** Встроенный адаптер для поиска и рендеринга иконок без загрузки всей библиотеки целиком.
+- 🧱 **Готовый UI-компонент:** `<Sandbox config={{ code, assets, modules, ... }} />` — импортируется и кастомизируется слотами (`render`, `renderLoading`, `renderError`, `wrapper`, `className`, `style`).
+- ▶️ **Живой предпросмотр:** `<PlayerSandbox />` (subpath `browser-tsx-sandbox/player`) показывает результат в `@remotion/player` с play/pause/seek — без серверного рендера.
 
 ---
 
@@ -143,14 +145,59 @@ npm run render:props          # вариации: текст/размер/цве
 
 ### 9. Пример использования на стороне потребителя
 
+**Самый простой способ — готовый UI-компонент.** Один импорт, вся конфигурация в объекте-пропсе:
+
 ```tsx
-import { SandboxFacade } from 'browser-tsx-sandbox';
+import { Sandbox } from 'browser-tsx-sandbox';
+
+function Preview({ userTsx, blobAssets }: { userTsx: string; blobAssets: Record<string, string> }) {
+  return (
+    <Sandbox
+      config={{
+        code: userTsx,
+        assets: blobAssets,                 // staticFile('logo.png') -> blob:...
+        className: 'rounded-lg overflow-hidden',
+        style: { height: 480 },
+        renderLoading: () => <Spinner />,
+        renderError: ({ error }) => <Banner text={error.message} />,
+        onCompiled: ({ executionTimeMs }) => console.log(`compiled in ${executionTimeMs}ms`),
+      }}
+    />
+  );
+}
+```
+
+`config` принимает:
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `code` | `string` | TSX для компиляции и рендера (обязательно) |
+| `modules` | `ModuleRegistry` | Доступные модули (`react` добавляется автоматически) |
+| `assets` | `Record<string, string>` | Карта ассетов для `staticFile(...)` (`blob:`/`data:`/`http`) |
+| `importer` | `ModuleImporter` | Свой загрузчик npm-пакетов (по умолчанию esm.sh) |
+| `className`, `style` | `string`, `CSSProperties` | Контейнер (включается, если заданы) |
+| `wrapper` | `ComponentType<{children}>` | Обёртка вокруг готового компонента |
+| `render` | `(ctx) => ReactNode` | Полный контроль над рендером |
+| `renderLoading`, `renderError` | `(ctx) => ReactNode` | Кастомные состояния |
+| `onCompiled`, `onError` | колбэки | Уведомления о результате |
+
+**Низкоуровневые API** для полного контроля:
+
+```tsx
+import { useLiveSandbox, SandboxFacade } from 'browser-tsx-sandbox';
 import * as React from 'react';
 
-const facade = new SandboxFacade({ react: React });
-facade.setAssets({ 'logo.png': 'blob:http://localhost/...' });
+// 1) Хук
+const { Component, error, isCompiling } = useLiveSandbox(code, {}, assets, {
+  importer,
+  onCompiled,
+  onError,
+});
 
-const { component: Component, error } = await facade.compile(userTsx);
+// 2) Фасад (императивно)
+const facade = new SandboxFacade({ react: React }, importer);
+facade.setAssets(assets);
+const { component: Compiled, error: compileError } = await facade.compile(code);
 ```
 
 ---
@@ -416,6 +463,44 @@ npm run render:cdn     # Chrome: d3 и three импортированы с esm.s
 Результат `render:cdn`: `cdn-libs.png` (17 КБ) и `cdn-libs.mp4` — валидный H.264 `640×360`, 60 кадров, `2.0s`, `valid: true`.
 
 > `framer-motion` скачивается (shim + bundle), но для рендера ему нужен общий с React-инстанс — в браузере это решается import-map/алиасингом (`?external=react`).
+
+---
+
+## ▶️ Живой предпросмотр (Remotion Player)
+
+`<PlayerSandbox />` компилирует TSX и **сразу** показывает его в официальном `@remotion/player` — с play/pause/seek, без серверного рендера. Это отдельный subpath, поэтому `@remotion/player` не тянется в основной бандл.
+
+```bash
+npm install browser-tsx-sandbox react @remotion/player
+```
+
+```tsx
+import { PlayerSandbox } from 'browser-tsx-sandbox/player';
+
+<PlayerSandbox
+  config={{
+    code: userTsx,
+    assets: blobAssets,          // staticFile('clip.mp4') -> blob:...
+    durationInFrames: 300,
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    controls: true,
+    loop: true,
+    renderLoading: () => <Spinner />,
+    renderError: ({ error }) => <Banner text={error.message} />,
+    onCompiled: ({ executionTimeMs }) => console.log(executionTimeMs),
+  }}
+/>
+```
+
+`config` = `SandboxConfig` + параметры плеера: `durationInFrames`, `fps`, `width`, `height`, `controls`, `loop`, `autoPlay`, `inputProps`, плюс `playerProps` (escape hatch для любых пропсов `<Player />`).
+
+Внутри Player работает полноценный Remotion-контекст: `useCurrentFrame()` / `useVideoConfig()` дают реальный кадр таймлайна (в отличие от голого `<Sandbox />`, где хуки вне композиции бросают исключение и виден статичный кадр 0).
+
+> **Рендер в файл** (`renderStill`/`renderMedia`) — по-прежнему офлайн в Node + Chrome; «смотреть прямо во время записи файла» нельзя, но Player даёт мгновенный предпросмотр рядом.
+
+Тест: `src/react/PlayerSandbox.test.tsx` (реальный `@remotion/player` в jsdom, включая `useCurrentFrame`).
 
 ---
 

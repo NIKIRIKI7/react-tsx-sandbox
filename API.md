@@ -9,7 +9,7 @@
 - [5. Базовые типы](#5-базовые-типы)
 - [6. Ошибки](#6-ошибки)
 - [7. `SandboxFacade`](#7-sandboxfacade)
-- [8. `useLiveSandbox`](#8-uselivesandbox)
+- [8. React-биндинги](#8-react-биндинги)
 - [9. Compiler](#9-compiler)
 - [10. Library Manager](#10-library-manager)
 - [11. Sandbox (изоляция и выполнение)](#11-sandbox-изоляция-и-выполнение)
@@ -39,13 +39,16 @@
 ## 2. Установка и форматы модулей
 
 ```bash
-npm install browser-tsx-sandbox react sucrase
+npm install browser-tsx-sandbox react
+# для живого предпросмотра дополнительно:
+npm install @remotion/player
 ```
 
-- **Формат:** ESM (`"type": "module"`), точка входа — `src/index.ts` (TypeScript-исходники; для публикации рекомендуется собрать в `dist`).
-- **Peer dependencies:** `react >= 17`, `sucrase >= 3`.
-- **Runtime dependencies:** `react`, `sucrase`, `fflate`.
-- **Dev-only (для e2e-рендера):** `remotion`, `@remotion/bundler`, `@remotion/renderer`, `lucide-react`, `tailwindcss`, `postcss`.
+- **Формат:** ESM + CJS, публикуется собранный `dist/` (`src/index.ts` — исходники разработки).
+- **Peer dependencies:** `react >= 17`; `@remotion/player >= 4` — **опционально** (только для `<PlayerSandbox />`).
+- **Runtime dependencies:** `sucrase`, `fflate`.
+- **Subpath:** `browser-tsx-sandbox/player` → `PlayerSandbox`.
+- **Dev-only (e2e/примеры):** `remotion`, `@remotion/player`, `@remotion/bundler`, `@remotion/renderer`, `lucide-react`, `tailwindcss`, `postcss`.
 
 ---
 
@@ -63,6 +66,8 @@ npm install browser-tsx-sandbox react sucrase
 | Sandbox | `src/sandbox/evaluator.ts` | `new Function` и `require` |
 | Assets | `src/assets/zip.ts` | Распаковка ZIP и blob-URL |
 | React | `src/react/useLiveSandbox.ts` | React-хук |
+| React | `src/react/Sandbox.tsx` | UI-компонент `<Sandbox config={...} />` |
+| React | `src/react/PlayerSandbox.tsx` | Live-preview через `@remotion/player` (subpath) |
 | Facade | `src/facade.ts` | Оркестратор |
 | Entry | `src/index.ts` | Публичные экспорты |
 
@@ -73,6 +78,18 @@ npm install browser-tsx-sandbox react sucrase
 ```ts
 export { SandboxFacade } from './facade';
 export { useLiveSandbox } from './react/useLiveSandbox';
+export type {
+  UseLiveSandboxOptions,
+  UseLiveSandboxResult,
+  CompiledComponentInfo,
+} from './react/useLiveSandbox';
+export { Sandbox } from './react/Sandbox';
+export type {
+  SandboxConfig,
+  SandboxProps,
+  SandboxRenderContext,
+  SandboxErrorContext,
+} from './react/Sandbox';
 
 export { ModuleCache } from './library-manager/cache';
 export { loadMissingModules } from './library-manager/loader';
@@ -89,6 +106,10 @@ export type { AssetArchive } from './assets/zip';
 
 export * from './core/types';
 export * from './core/errors';
+
+// subpath: browser-tsx-sandbox/player (требует @remotion/player)
+export { PlayerSandbox } from './react/PlayerSandbox';
+export type { PlayerSandboxConfig, PlayerSandboxProps } from './react/PlayerSandbox';
 ```
 
 ---
@@ -214,18 +235,29 @@ else renderToDom(component);
 
 ---
 
-## 8. `useLiveSandbox`
+## 8. React-биндинги
+
+### 8.1 `useLiveSandbox`
 
 ```ts
-function useLiveSandbox(
-  code: string,
-  initialModules: ModuleRegistry,
-  localAssets?: Record<string, string>,
-): {
+interface UseLiveSandboxOptions {
+  importer?: ModuleImporter;
+  onError?: (error: Error) => void;
+  onCompiled?: (info: { component: React.ComponentType<any>; executionTimeMs: number }) => void;
+}
+
+interface UseLiveSandboxResult {
   Component: React.ComponentType<any> | null;
   error: Error | null;
   isCompiling: boolean;
 }
+
+function useLiveSandbox(
+  code: string,
+  initialModules: ModuleRegistry,
+  localAssets?: Record<string, string>,
+  options?: UseLiveSandboxOptions,
+): UseLiveSandboxResult
 ```
 
 | Параметр | Описание |
@@ -233,23 +265,109 @@ function useLiveSandbox(
 | `code` | TSX-строка для компиляции |
 | `initialModules` | Предрегистрированные модули; `react` подставляется автоматически |
 | `localAssets` | Карта `имя → blob:url` для `staticFile` |
+| `options.importer` | Свой загрузчик npm-пакетов (задаётся при создании фасада) |
+| `options.onError` | Колбэк ошибки |
+| `options.onCompiled` | Колбэк успешной компиляции (`component`, `executionTimeMs`) |
 
 Поведение:
 
-- `SandboxFacade` создаётся один раз (`useRef`); `react` добавляется автоматически.
-- Компиляция перезапускается при изменении `code` или содержимого ассетов.
-- **`localAssets` не должен передаваться новым объектом каждый рендер без изменения содержимого** — хук сравнивает `JSON.stringify(localAssets)`, поэтому идентичность объекта безопасна.
-- При размонтировании результат отбрасывается (`isMounted`-guard).
-- Ошибки компиляции попадают в `error`, а не выбрасываются.
+- фасад создаётся один раз (`useRef`); `react` добавляется автоматически;
+- перекомпиляция при изменении `code` или содержимого ассетов (сравнение `JSON.stringify`), поэтому идентичность объекта `localAssets` безопасна;
+- колбэки и `importer` читаются через `ref` и не пересоздают эффект;
+- при размонтировании результат отбрасывается (`isMounted`-guard);
+- ошибки попадают в `error`, а не выбрасываются.
+
+### 8.2 `Sandbox` (UI-компонент)
+
+Готовый компонент: компилирует `code` и рендерит результат. Кастомизируется слотами и контейнером.
 
 ```tsx
-function Preview({ code, assets }: { code: string; assets: Record<string, string> }) {
-  const { Component, error, isCompiling } = useLiveSandbox(code, {});
-  if (isCompiling) return <Spinner />;
-  if (error) return <ErrorOverlay error={error} />;
-  return Component ? <Component /> : null;
-}
+import { Sandbox } from 'browser-tsx-sandbox';
+
+<Sandbox
+  config={{
+    code: userTsx,
+    assets: blobAssets,
+    className: 'preview',
+    style: { height: 480 },
+    renderLoading: () => <Spinner />,
+    renderError: ({ error }) => <Banner text={error.message} />,
+    onCompiled: ({ executionTimeMs }) => console.log(executionTimeMs),
+  }}
+/>
 ```
+
+```ts
+interface SandboxConfig {
+  code: string;
+  modules?: ModuleRegistry;
+  assets?: Record<string, string>;
+  importer?: ModuleImporter;
+  className?: string;
+  style?: React.CSSProperties;
+  wrapper?: React.ComponentType<{ children: React.ReactNode }>;
+  render?: (ctx: SandboxRenderContext) => React.ReactNode;
+  renderLoading?: (ctx: SandboxRenderContext) => React.ReactNode;
+  renderError?: (ctx: SandboxErrorContext) => React.ReactNode;
+  onError?: (error: Error) => void;
+  onCompiled?: (info: CompiledComponentInfo) => void;
+}
+
+interface SandboxRenderContext {
+  Component: React.ComponentType<any> | null;
+  error: Error | null;
+  isCompiling: boolean;
+}
+
+interface SandboxErrorContext extends SandboxRenderContext { error: Error }
+interface SandboxProps { config: SandboxConfig }
+```
+
+Приоритет рендера:
+
+1. `render(ctx)` — если задан, управляет выводом полностью;
+2. `error` → `renderError({ ...ctx, error })`, иначе `<pre>` с текстом ошибки;
+3. `isCompiling || !Component` → `renderLoading(ctx)`, иначе `null`;
+4. иначе `<Component />`, обёрнутый в `wrapper`, а при наличии `className`/`style` — в `<div data-tsx-sandbox>`.
+
+Особенности:
+
+- без `className`/`style`/`wrapper` лишний DOM не добавляется — можно рендерить full-screen (`AbsoluteFill`) компоненты;
+- атрибут `data-tsx-sandbox` на контейнере упрощает стилизацию и тесты;
+- `config.modules`/`config.assets` можно передавать новыми объектами каждый рендер — это безопасно.
+
+### 8.3 `PlayerSandbox` (subpath `browser-tsx-sandbox/player`)
+
+Живой предпросмотр через официальный `@remotion/player`: play/pause/seek без серверного рендера.
+
+```tsx
+import { PlayerSandbox } from 'browser-tsx-sandbox/player';
+
+<PlayerSandbox
+  config={{ code, durationInFrames: 300, fps: 30, width: 1920, height: 1080, controls: true }}
+/>
+```
+
+```ts
+interface PlayerSandboxConfig extends SandboxConfig {
+  durationInFrames?: number; // 300
+  fps?: number;              // 30
+  width?: number;            // 1920
+  height?: number;           // 1080
+  controls?: boolean;        // true
+  loop?: boolean;
+  autoPlay?: boolean;
+  inputProps?: Record<string, unknown>;
+  playerProps?: Partial<PlayerPropsWithoutZod<Record<string, unknown>>>;
+}
+
+interface PlayerSandboxProps { config: PlayerSandboxConfig }
+```
+
+- Слоты `render` / `renderLoading` / `renderError` / `wrapper` / `className` / `style` / `onCompiled` / `onError` работают так же, как у `Sandbox`.
+- `inputProps` передаются в скомпилированный компонент; `playerProps` — escape hatch для любых пропсов `<Player />`.
+- Внутри Player доступен Remotion-контекст: `useCurrentFrame()` / `useVideoConfig()` возвращают реальные значения таймлайна (в голом `Sandbox` они бросают исключение вне композиции).
+- Требует установленный `@remotion/player` (опциональный peer) и вынесен в subpath, чтобы не попадать в основной бандл.
 
 ---
 
@@ -577,7 +695,7 @@ node render/render-widgets.mjs examples/vidora-widgets-logo.json
 
 | Команда | Что проверяет |
 |---|---|
-| `npm test` | Юнит-тесты (77 тестов): analyzer, transform, cache, loader, scope, evaluator, errors, zip, facade, `useLiveSandbox` |
+| `npm test` | Юнит-тесты (92 теста): analyzer, transform, cache, loader, scope, evaluator, errors, zip, facade, `useLiveSandbox`, `Sandbox`, `PlayerSandbox` |
 | `npm run test:e2e` | E2E: реальный рендер через Remotion + Chrome (без ассетов, с ZIP, пример, виджеты, пропсы) |
 | `npm run test:network` | Сетевые тесты: реальная загрузка библиотек с esm.sh (d3, three, canvas-confetti, framer-motion) |
 | `npm run verify:video` | Проверка выданного MP4: контейнер (`ftyp`/`moov`), кодек `avc1`, размеры, длительность, сверка с `ffprobe` |

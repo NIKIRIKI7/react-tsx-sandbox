@@ -1,5 +1,17 @@
 export { SandboxFacade } from './facade';
 export { useLiveSandbox } from './react/useLiveSandbox';
+export type {
+  UseLiveSandboxOptions,
+  UseLiveSandboxResult,
+  CompiledComponentInfo,
+} from './react/useLiveSandbox';
+export { Sandbox } from './react/Sandbox';
+export type {
+  SandboxConfig,
+  SandboxProps,
+  SandboxRenderContext,
+  SandboxErrorContext,
+} from './react/Sandbox';
 export { ModuleCache } from './library-manager/cache';
 export { loadMissingModules } from './library-manager/loader';
 export type { ModuleImporter } from './library-manager/loader';

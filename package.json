@@ -1,6 +1,6 @@
 {
   "name": "browser-tsx-sandbox",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Pure client-side TSX compiler and sandbox evaluator with dynamic NPM library loading.",
   "type": "module",
   "license": "MIT",
@@ -13,6 +13,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./player": {
+      "types": "./dist/player.d.ts",
+      "import": "./dist/player.js",
+      "require": "./dist/player.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -55,10 +60,17 @@
     "sucrase": "^3.35.0"
   },
   "peerDependencies": {
-    "react": ">=17"
+    "react": ">=17",
+    "@remotion/player": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "@remotion/player": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@remotion/bundler": "^4.0.524",
+    "@remotion/player": "^4.0.524",
     "@remotion/renderer": "^4.0.524",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.1",
