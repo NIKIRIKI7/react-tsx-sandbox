@@ -52,6 +52,7 @@
     "render:widgets:logo": "node render/render-widgets.mjs examples/vidora-widgets-logo.json",
     "render:props": "node render/render-props.mjs",
     "render:cdn": "node render/render-cdn.mjs",
+    "render:showcase": "node render/render-showcase.mjs",
     "demo": "vite demo --open",
     "demo:build": "vite build demo",
     "verify:video": "node render/verify-video.mjs",

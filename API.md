@@ -668,6 +668,8 @@ imageUrl  >  iconName  >  logoText
 | `npm run render:widgets` | `examples/vidora-widgets.json` | `widget-*.png`, `widget-*.mp4` |
 | `npm run render:widgets:logo` | `examples/vidora-widgets-logo.json` | `widget-LogoShineBadge*.png` |
 | `npm run render:props` | лого-каталог + вариации | `props-Props*.png` |
+| `npm run render:cdn` | встроенная CDN-сцена | `cdn-libs.png`, `cdn-libs.mp4` |
+| `npm run render:showcase` | `render/showcase-scene.tsx` (Tailwind + lucide + d3/three) | `showcase-frame-*.png`, `showcase.mp4` |
 
 Механика:
 

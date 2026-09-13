@@ -49,6 +49,7 @@ npm install
 | `npm run render:widgets:logo` | рендер каталога `examples/vidora-widgets-logo.json` |
 | `npm run render:props` | рендер вариаций пропсов (проверка, что параметры меняют результат) |
 | `npm run render:cdn` | рендер сцены с библиотеками, скачанными с esm.sh в браузере |
+| `npm run render:showcase` | сводный рендер: Tailwind + lucide + d3/three в одной сцене |
 | `npm run demo` | открыть demo-страницу с живым `<PlayerSandbox />` (Vite) |
 | `npm run demo:build` | собрать статику demo-страницы в `demo/dist` |
 | `npm run build` | сборка npm-пакета (`tsup` → `dist/`: ESM + CJS + типы) |
@@ -463,6 +464,8 @@ npm run render:cdn     # Chrome: d3 и three импортированы с esm.s
 ```
 
 Результат `render:cdn`: `cdn-libs.png` (17 КБ) и `cdn-libs.mp4` — валидный H.264 `640×360`, 60 кадров, `2.0s`, `valid: true`.
+
+Сводный пример — `npm run render:showcase` (сцена `render/showcase-scene.tsx`): за одну анимацию используются **Tailwind** (утилиты компилируются и инжектятся), **lucide-react** (реальные иконки) и **d3 + three** (скачиваются с esm.sh во время рендера). Результат: `showcase-frame-*.png` и `showcase.mp4` — H.264 `1280×720`, 120 кадров, `4.0s`, `valid: true`. Тест `render/showcase.e2e.test.ts` дополнительно проверяет, что Tailwind-утилиты (`.flex`, `.grid-cols-4`, `.rounded-2xl`, `.shadow-2xl`, `.bg-slate-950`) реально попали в CSS.
 
 > `framer-motion` скачивается (shim + bundle), но для рендера ему нужен общий с React-инстанс — в браузере это решается import-map/алиасингом (`?external=react`).
 
