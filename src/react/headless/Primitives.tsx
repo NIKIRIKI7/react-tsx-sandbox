@@ -1,12 +1,31 @@
-import type { ButtonHTMLAttributes, ChangeEvent, CSSProperties } from 'react';
+import type { ButtonHTMLAttributes, ChangeEvent, CSSProperties, ReactNode } from 'react';
 import { usePlayerContext } from './PlayerContext';
 
-export function PlayPauseButton({
-  children,
-  onClick,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+/** Состояние, передаваемое в render prop кнопки Play/Pause. */
+export interface PlayPauseButtonRenderProps {
+  isPlaying: boolean;
+  toggle: () => void;
+}
+
+export type PlayPauseButtonChildren =
+  | ReactNode
+  | ((context: PlayPauseButtonRenderProps) => ReactNode);
+
+export interface PlayPauseButtonProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+  /**
+   * Render prop для полного контроля над разметкой (Radix, MUI, Tailwind...).
+   * При передаче функции стандартная `<button>` не рендерится.
+   */
+  children?: PlayPauseButtonChildren;
+}
+
+export function PlayPauseButton({ children, onClick, ...props }: PlayPauseButtonProps) {
   const { isPlaying, toggle } = usePlayerContext();
+
+  if (typeof children === 'function') {
+    return <>{children({ isPlaying, toggle })}</>;
+  }
 
   return (
     <button
@@ -30,14 +49,39 @@ function formatTimecode(frame: number, fps: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+/** Состояние, передаваемое в render prop счётчика времени. */
+export interface TimeDisplayRenderProps {
+  frame: number;
+  totalFrames: number;
+  time: string;
+  totalTime: string;
+  fps: number;
+}
+
 export interface TimeDisplayProps {
   format?: 'frames' | 'time' | 'both';
   className?: string;
   style?: CSSProperties;
+  /** Render prop для кастомного форматирования времени. */
+  render?: (context: TimeDisplayRenderProps) => ReactNode;
 }
 
-export function TimeDisplay({ format = 'both', className, style }: TimeDisplayProps) {
+export function TimeDisplay({ format = 'both', className, style, render }: TimeDisplayProps) {
   const { currentFrame, durationInFrames, fps } = usePlayerContext();
+
+  if (render) {
+    return (
+      <>
+        {render({
+          frame: currentFrame,
+          totalFrames: durationInFrames,
+          time: formatTimecode(currentFrame, fps),
+          totalTime: formatTimecode(durationInFrames, fps),
+          fps,
+        })}
+      </>
+    );
+  }
 
   const content =
     format === 'frames'
@@ -57,13 +101,26 @@ export function TimeDisplay({ format = 'both', className, style }: TimeDisplayPr
   );
 }
 
+/** Состояние, передаваемое в render prop таймлайна. */
+export interface TimelineBarRenderProps {
+  currentFrame: number;
+  durationInFrames: number;
+  seekTo: (frame: number) => void;
+}
+
 export interface TimelineBarProps {
   className?: string;
   style?: CSSProperties;
+  /** Render prop для кастомного ползунка (Radix Slider, дорожки и т.п.). */
+  render?: (context: TimelineBarRenderProps) => ReactNode;
 }
 
-export function TimelineBar({ className, style }: TimelineBarProps) {
+export function TimelineBar({ className, style, render }: TimelineBarProps) {
   const { currentFrame, durationInFrames, seekTo } = usePlayerContext();
+
+  if (render) {
+    return <>{render({ currentFrame, durationInFrames, seekTo })}</>;
+  }
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     seekTo(Number(event.target.value));
@@ -87,8 +144,27 @@ export function TimelineBar({ className, style }: TimelineBarProps) {
   );
 }
 
-export function VolumeControl({ className, style }: { className?: string; style?: CSSProperties }) {
+/** Состояние, передаваемое в render prop регулятора громкости. */
+export interface VolumeControlRenderProps {
+  volume: number;
+  isMuted: boolean;
+  setVolume: (volume: number) => void;
+  toggleMute: () => void;
+}
+
+export interface VolumeControlProps {
+  className?: string;
+  style?: CSSProperties;
+  /** Render prop для кастомного контрола громкости. */
+  render?: (context: VolumeControlRenderProps) => ReactNode;
+}
+
+export function VolumeControl({ className, style, render }: VolumeControlProps) {
   const { volume, setVolume, isMuted, toggleMute } = usePlayerContext();
+
+  if (render) {
+    return <>{render({ volume, isMuted, setVolume, toggleMute })}</>;
+  }
 
   return (
     <div
@@ -97,10 +173,11 @@ export function VolumeControl({ className, style }: { className?: string; style?
       style={{ display: 'flex', alignItems: 'center', gap: 6, ...style }}
     >
       <button type="button" data-testid="player-mute-button" onClick={toggleMute}>
-        {isMuted ? '🔇' : '🔊'}
+        {isMuted || volume === 0 ? '🔇' : '🔊'}
       </button>
       <input
         type="range"
+        data-testid="player-volume-slider"
         min={0}
         max={1}
         step={0.01}

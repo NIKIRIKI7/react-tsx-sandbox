@@ -149,4 +149,54 @@ describe('PlayerSandbox: reliability, DX и headless UI', () => {
     expect(screen.getByTestId('player-time-display').textContent).toContain('0 / 150f');
     expect(screen.getByTestId('player-timeline')).toBeTruthy();
   });
+
+  it('поддерживает render props для кастомного UI (без дефолтной разметки)', async () => {
+    render(
+      <PlayerSandbox.Root
+        config={{
+          code: `export default function C(){ return <div>Render Props Scene</div>; }`,
+          durationInFrames: 200,
+          fps: 25,
+          controls: false,
+        }}
+      >
+        <PlayerSandbox.PlayButton>
+          {({ isPlaying }) => (
+            <button data-testid="rp-play">{isPlaying ? 'pause' : 'play'}</button>
+          )}
+        </PlayerSandbox.PlayButton>
+        <PlayerSandbox.TimeDisplay
+          render={({ frame, totalFrames, fps }) => (
+            <span data-testid="rp-time">
+              {frame}/{totalFrames}@{fps}
+            </span>
+          )}
+        />
+        <PlayerSandbox.Timeline
+          render={({ currentFrame, durationInFrames, seekTo }) => (
+            <button data-testid="rp-timeline" onClick={() => seekTo(durationInFrames - 1)}>
+              {currentFrame}
+            </button>
+          )}
+        />
+        <PlayerSandbox.VolumeControl
+          render={({ volume, isMuted }) => (
+            <span data-testid="rp-volume">{isMuted ? 'muted' : volume}</span>
+          )}
+        />
+      </PlayerSandbox.Root>,
+    );
+
+    await screen.findByText('Render Props Scene');
+
+    // Дефолтной разметки быть не должно — только кастомная.
+    expect(screen.queryByTestId('player-play-button')).toBeNull();
+    expect(screen.getByTestId('rp-play').textContent).toBe('play');
+    expect(screen.getByTestId('rp-time').textContent).toBe('0/200@25');
+    expect(screen.getByTestId('rp-timeline').textContent).toBe('0');
+    expect(screen.getByTestId('rp-volume').textContent).toBe('1');
+
+    fireEvent.click(screen.getByTestId('rp-timeline'));
+    await screen.findByText('Render Props Scene');
+  });
 });

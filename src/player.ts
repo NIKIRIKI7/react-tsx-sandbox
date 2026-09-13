@@ -17,6 +17,16 @@ export {
   TimelineBar,
   VolumeControl,
 } from './react/headless/Primitives';
+export type {
+  PlayPauseButtonProps,
+  PlayPauseButtonRenderProps,
+  TimeDisplayProps,
+  TimeDisplayRenderProps,
+  TimelineBarProps,
+  TimelineBarRenderProps,
+  VolumeControlProps,
+  VolumeControlRenderProps,
+} from './react/headless/Primitives';
 
 export { takeContainerSnapshot } from './sandbox/snapshot';
 export type { SnapshotOptions } from './sandbox/snapshot';

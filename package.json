@@ -53,6 +53,10 @@
     "render:props": "node render/render-props.mjs",
     "render:cdn": "node render/render-cdn.mjs",
     "render:showcase": "node render/render-showcase.mjs",
+    "render:audio": "node render/render-audio.mjs",
+    "render:animation": "node render/render-animation.mjs",
+    "render:timeline": "node render/render-timeline.mjs",
+    "render:voiceover": "node render/render-voiceover.mjs",
     "demo": "vite demo --open",
     "demo:build": "vite build demo",
     "verify:video": "node render/verify-video.mjs",
@@ -64,10 +68,14 @@
   },
   "peerDependencies": {
     "@remotion/player": ">=4",
-    "react": ">=17"
+    "react": ">=17",
+    "remotion": ">=4"
   },
   "peerDependenciesMeta": {
     "@remotion/player": {
+      "optional": true
+    },
+    "remotion": {
       "optional": true
     }
   },

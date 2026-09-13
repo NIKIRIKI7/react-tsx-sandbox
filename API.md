@@ -782,6 +782,10 @@ node render/render-widgets.mjs examples/vidora-widgets-logo.json
 | `prepack` | автосборка перед `npm pack`/`npm publish` |
 | `prepublishOnly` | `npm run typecheck && npm test` |
 | `pack:check` | `npm pack --dry-run` |
+| `render:audio` | `node render/render-audio.mjs` — рендер аудиосцены в MP4 с AAC-дорожкой |
+| `render:animation` | `node render/render-animation.mjs` — рендер анимации со скачанными музыкой/SFX |
+| `render:timeline` | `node render/render-timeline.mjs` — рендер Data-Driven таймлайна из массива `Cue` |
+| `render:voiceover` | `node render/render-voiceover.mjs` — рендер с реальной озвучкой + музыкой + SFX |
 | `verify:video` | `node render/verify-video.mjs <file.mp4 \| dir>` |
 
 ### 18.3 Инструмент `verify-video`
@@ -1027,7 +1031,7 @@ interface PlayerSandboxRef {
 
 Доступ к состоянию — `usePlayerContext()` (`PlayerContextValue`): `currentFrame`, `durationInFrames`, `fps`, `isPlaying`, `zoom`, `pan`, `seekTo`, `play/pause/toggle`, `setVolume`, `toggleMute`, `setZoom`, `setPan`, `resetZoomPan`, `takeSnapshot`.
 
-> Headless-компоненты обязаны находиться внутри `PlayerSandbox.Root` — иначе `usePlayerContext` бросит ошибку.
+> Headless-компоненты обязаны находиться внутри `PlayerSandbox.Root` — иначе `usePlayerContext` бросит ошибку. Все примитивы поддерживают render props — см. раздел 22.
 
 ### 20.4 Watchdog `delayRender`
 
@@ -1080,3 +1084,360 @@ function SafeZonesOverlay(props: SafeZonesOverlayProps): JSX.Element;
 - `npm run demo` → редактор TSX + Player (`demo/index.html`).
 - `/studio.html` → Smart Frame Retention, ref-API, snapshot, safe zones, зум, headless-тулбар (`demo/studio.html`).
 - `npm run demo:build` собирает обе страницы в `demo/dist`.
+
+---
+
+## 21. Работа с аудио (музыка и озвучка)
+
+`browser-tsx-sandbox` не содержит собственного аудио-движка: микширование выполняет штатный тег `<Audio />` из Remotion. Песочница лишь доставляет ассеты в сцену через мост `assets → blob: URL → staticFile(...)`. Декодирование, синхронизация с таймлайном и сведение происходят в браузере, без сервера.
+
+### 21.1 Пайплайн добавления аудио
+
+1. **Загрузка.** Пользователь выбирает MP3/WAV (`<input type="file">` / Drag & Drop).
+2. **Blob URL.** Файл конвертируется в локальную ссылку: `URL.createObjectURL(file)`.
+3. **Регистрация.** Ссылка кладётся в `config.assets` под виртуальным именем — `{ 'bgm.mp3': url }`.
+4. **Рендер в TSX.** В коде используется `staticFile('bgm.mp3')`; Remotion подставляет blob-адрес.
+
+```tsx
+import { PlayerSandbox } from 'browser-tsx-sandbox/player';
+
+const assets = {
+  'bgm.mp3': URL.createObjectURL(bgmFile),
+  'voice.mp3': URL.createObjectURL(voiceFile),
+};
+
+<PlayerSandbox config={{ code: sceneTsx, assets }} />;
+```
+
+При освобождении ресурсов вызовите `URL.revokeObjectURL(url)` (см. `releaseAssetUrls`, раздел 12).
+
+### 21.2 Пример: музыка на фоне + озвучка с Audio Ducking
+
+Громкость фоновой музыки интерполируется от `currentFrame`: пока идёт озвучка, музыка приглушается. Озвучка помещается в `<Sequence>` с собственным отрезком таймлайна.
+
+```tsx
+import React from 'react';
+import {
+  AbsoluteFill, Audio, Sequence, staticFile,
+  useCurrentFrame, useVideoConfig, interpolate,
+} from 'remotion';
+
+export default function AudioDuckingScene() {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const voiceStart = 60;
+  const voiceLength = 180;
+  const voiceEnd = voiceStart + voiceLength;
+
+  const bgmVolume = interpolate(
+    frame,
+    [voiceStart - 20, voiceStart, voiceEnd, voiceEnd + 20],
+    [0.8, 0.15, 0.15, 0.8],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+  );
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#020617' }}>
+      {/* Фоновая музыка — играет всю композицию. */}
+      <Audio src={staticFile('bgm.mp3')} volume={bgmVolume} />
+
+      {/* Озвучка — только на своём отрезке таймлайна. */}
+      <Sequence from={voiceStart} durationInFrames={voiceLength}>
+        <Audio src={staticFile('voice.mp3')} volume={1} />
+      </Sequence>
+    </AbsoluteFill>
+  );
+}
+```
+
+Полный рабочий пример с визуализацией уровней — `examples/audio-ducking-scene.tsx`.
+
+### 21.3 Рендер-харнесс
+
+```bash
+npm run render:audio
+# -> render/out/audio-frame-045.png, render/out/audio-frame-090.png
+# -> render/out/audio-ducking.mp4  (H.264 + AAC)
+```
+
+`render/render-audio.mjs`: генерирует WAV-тоны в `render/public/audio/` (без сети и бинарных ассетов), компилирует Tailwind из исходника сцены, бандлит `render/entry-audio.tsx`, где сцена прогоняется через `SandboxFacade`/`executeComponent`, и рендерит кадры и MP4. E2E-тест `render/audio.e2e.test.ts` дополнительно проверяет наличие аудиодорожки AAC (`mp4a`) в контейнере.
+
+### 21.4 Анимация со скачанными музыкой и SFX
+
+`examples/audio-animation-scene.tsx` — ритм-ориентированная сцена: реальная музыка (`music.mp3`) приглушается на каждый удар, а короткие SFX (`pop.ogg`) запускаются `<Sequence>` точно по биту (120 BPM при 30 fps = 15 кадров). Медиа скачиваются из открытых источников (SoundHelix, Google Sound Library).
+
+```bash
+npm run render:animation
+# -> render/out/animation-frame-{045,090,135,165}.png
+# -> render/out/sound-motion.mp4  (H.264 1280x720 + AAC 48kHz stereo)
+```
+
+`render/render-animation.mjs` сам скачивает и кэширует аудио в `render/public/audio/`, компилирует Tailwind, бандлит `render/entry-animation.tsx` и рендерит PNG-кадры и MP4. E2E-тест `render/animation.e2e.test.ts` валидирует контейнер и наличие аудиодорожки (`mp4a`).
+
+### 21.5 Реальная озвучка (voiceover)
+
+`examples/voiceover-animation.tsx` использует реальный файл `examples/voice/voice_01.wav` (PCM, 24 kHz, mono, ~39 c). Озвучка подключается как `staticFile('voice/voice_01.wav')`; для живого Player ассет передаётся через карту `config.assets`:
+
+```tsx
+const assets = { 'voice/voice_01.wav': URL.createObjectURL(voiceFile) };
+<PlayerSandbox config={{ code, assets }} />;
+```
+
+Музыка автоматически затихает, пока активна voice-cue (Audio Ducking), а SFX (`pop`, `beep`) играют по таймкоду. Пример построен на Data-Driven Timeline (см. раздел 23): `MusicLayer` + `SFXLayer` + `TrackLayer` + `useActiveCues`.
+
+```bash
+npm run render:voiceover
+# -> render/out/voiceover-frame-{045,090,165,255}.png
+# -> render/out/voiceover-animation.mp4  (H.264 1280x720 + AAC 48kHz stereo)
+```
+
+`render/render-voiceover.mjs` копирует озвучку в `render/public/voice/`, подтягивает музыку/SFX в `render/public/audio/` и переписывает их URL на `staticFile(...)`. E2E-тест `render/voiceover.e2e.test.ts` проверяет контейнер и наличие AAC-дорожки. Уровень звука: `ffmpeg -i render/out/voiceover-animation.mp4 -af volumedetect -f null -` → `mean_volume ≈ -22.6 dB`, `max_volume ≈ -4.1 dB`.
+
+---
+
+## 22. Максимальная кастомизация UI плеера (Headless Render Props)
+
+Все примитивы `PlayerSandbox` можно полностью переопределить: вместо дефолтных `<button>`/`<input type="range">` вы рендерите собственные компоненты (Tailwind, Radix UI, MUI), а логика плеера остаётся внутри. Для этого используется паттерн **Render Props** — примитив вызывает вашу функцию и передаёт в неё актуальное состояние.
+
+### 22.1 Контракты render props
+
+| Компонент | Проп | Тип контекста |
+|---|---|---|
+| `PlayerSandbox.PlayButton` | `children` (функция) | `{ isPlaying: boolean; toggle: () => void }` |
+| `PlayerSandbox.TimeDisplay` | `render` | `{ frame: number; totalFrames: number; time: string; totalTime: string; fps: number }` |
+| `PlayerSandbox.Timeline` | `render` | `{ currentFrame: number; durationInFrames: number; seekTo: (frame: number) => void }` |
+| `PlayerSandbox.VolumeControl` | `render` | `{ volume: number; isMuted: boolean; setVolume: (v: number) => void; toggleMute: () => void }` |
+
+Соответствующие типы (`PlayPauseButtonRenderProps`, `TimeDisplayRenderProps`, `TimelineBarRenderProps`, `VolumeControlRenderProps`, а также `*Props`) экспортируются из `browser-tsx-sandbox` и `browser-tsx-sandbox/player`.
+
+Если render prop не передан, примитив рендерит дефолтную разметку (обратная совместимость). `PlayPauseButton` также принимает все стандартные атрибуты `<button>`.
+
+### 22.2 Пример: кастомный тулбар на Tailwind + lucide
+
+```tsx
+import { PlayerSandbox } from 'browser-tsx-sandbox/player';
+import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+
+<PlayerSandbox.Root config={config}>
+  <div className="rounded-xl border border-gray-800 overflow-hidden mb-4">
+    <PlayerSandbox />
+  </div>
+
+  <div className="flex items-center gap-4 bg-gray-900 p-4 rounded-xl shadow-lg">
+    <PlayerSandbox.PlayButton>
+      {({ isPlaying, toggle }) => (
+        <button
+          onClick={toggle}
+          className="p-3 bg-blue-600 hover:bg-blue-500 rounded-full text-white active:scale-95"
+        >
+          {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+        </button>
+      )}
+    </PlayerSandbox.PlayButton>
+
+    <PlayerSandbox.Timeline
+      render={({ currentFrame, durationInFrames, seekTo }) => (
+        <input
+          type="range"
+          className="flex-1 accent-blue-500"
+          min={0}
+          max={durationInFrames}
+          value={currentFrame}
+          onChange={(e) => seekTo(Number(e.target.value))}
+        />
+      )}
+    />
+
+    <PlayerSandbox.TimeDisplay
+      render={({ time, totalTime }) => (
+        <span className="font-mono text-sm text-gray-400">{time} / {totalTime}</span>
+      )}
+    />
+
+    <PlayerSandbox.VolumeControl
+      render={({ volume, isMuted, setVolume, toggleMute }) => (
+        <div className="flex items-center gap-2">
+          <button onClick={toggleMute} className="text-gray-400 hover:text-white">
+            {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
+          <input
+            type="range"
+            min={0} max={1} step={0.01} value={volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            className="w-20 accent-blue-500"
+          />
+        </div>
+      )}
+    />
+  </div>
+</PlayerSandbox.Root>
+```
+
+### 22.3 `usePlayerContext` вне стандартной структуры
+
+Любой компонент внутри `PlayerSandbox.Root` может читать состояние и управлять плеером напрямую.
+
+```tsx
+import { usePlayerContext } from 'browser-tsx-sandbox/player';
+
+function CustomSeekButtons() {
+  const { seekTo, currentFrame, durationInFrames, play, pause, isPlaying } = usePlayerContext();
+
+  return (
+    <div className="flex gap-2">
+      <button onClick={() => seekTo(Math.max(0, currentFrame - 30))}>-1s</button>
+      <button onClick={isPlaying ? pause : play}>{isPlaying ? 'Pause' : 'Play'}</button>
+      <button onClick={() => seekTo(durationInFrames / 2)}>На середину</button>
+    </div>
+  );
+}
+```
+
+`PlayerContextValue` содержит: `playerRef`, `containerRef`, `currentFrame`, `durationInFrames`, `fps`, `isPlaying`, `isMuted`, `volume`, `zoom`, `pan`, `seekTo`, `play`, `pause`, `toggle`, `setVolume`, `toggleMute`, `setZoom`, `setPan`, `resetZoomPan`, `takeSnapshot`.
+
+### 22.4 Тесты
+
+- `src/react/headless/Primitives.test.tsx` — дефолтная разметка и render props каждого примитива.
+- `src/react/PlayerSandbox.advanced.test.tsx` — интеграция render props с реальным `@remotion/player`.
+- `src/facade.audio.test.ts` — компиляция/выполнение аудиосцены (`Audio` + `Sequence`).
+- `src/timeline/timeline.test.tsx` — логика Data-Driven таймлайна (см. раздел 23).
+- `src/facade.timeline.test.ts` — компиляция/выполнение сцены на массиве `Cue`.
+
+---
+
+## 23. Data-Driven Timeline (Музыка, SFX и слои)
+
+Вместо хардкода `<Sequence>`/`<Audio>` в TSX слои описываются единым JSON-массивом объектов `Cue`. Это позволяет редактору или AI-генератору мутировать массив в стейте и передавать его в `inputProps` песочницы — сцена обновится **без перекомпиляции кода**.
+
+### 23.1 Структура `Cue<T>`
+
+```ts
+interface Cue<T = Record<string, unknown>> {
+  id: string | number;
+  type: string;               // 'music' | 'sfx' | 'voice' | 'caption' | 'sticker' | ...
+  startFrame: number;         // таймкод появления
+  durationInFrames?: number;  // длительность (по умолчанию — до конца композиции)
+  payload: T;                 // данные: src, volume, текст, координаты и т.п.
+}
+
+interface AudioPayload {
+  src: string;
+  volume?: number;
+  playbackRate?: number;
+}
+```
+
+Все типы (`Cue`, `AudioPayload`, `SFXPayload`, `SFXLayerProps`, `MusicLayerProps`, `TrackLayerProps`) экспортируются из корня пакета.
+
+### 23.2 `MusicLayer` и Audio Ducking
+
+Рендерит события `type: 'music'`. Проп `volumeDucking` — функция `(frame) => number` (0..1), которая умножается на базовую громкость трека. Remotion `Audio` нативно принимает функцию в `volume`, поэтому приглушение вычисляется покадрово и плавно.
+
+```tsx
+import { MusicLayer, Cue } from 'browser-tsx-sandbox';
+
+const cues: Cue[] = [
+  { id: 'bgm', type: 'music', startFrame: 0, payload: { src: 'bgm.mp3', volume: 0.8 } },
+];
+
+export default function Scene() {
+  // Приглушаем музыку до 15%, пока звучит озвучка (60..180 кадр).
+  const ducking = (frame: number) => (frame >= 60 && frame <= 180 ? 0.15 : 1);
+  return <MusicLayer cues={cues} volumeDucking={ducking} />;
+}
+```
+
+### 23.3 `SFXLayer` (звуковые эффекты)
+
+Рендерит все события `type: 'sfx'` как `<Sequence from={startFrame}><Audio /></Sequence>`. `globalVolume` используется, если у события нет собственного `payload.volume`.
+
+```tsx
+<SFXLayer cues={cues} globalVolume={0.9} />
+```
+
+### 23.4 `TrackLayer` (визуальные слои)
+
+Универсальный трек для стикеров, плашек и оверлеев. Компонент берёт на себя тайминг (`<Sequence>`), вы задаёте только контент через `renderCue`.
+
+```tsx
+<TrackLayer
+  cues={cues}
+  type="sticker"
+  renderCue={(cue) => <img src={cue.payload.url} style={{ left: cue.payload.x }} />}
+/>
+```
+
+### 23.5 `useActiveCues` (субтитры и текущее состояние)
+
+Хук возвращает события, активные на текущем кадре (опционально — только заданного типа). Удобно для единого блока субтитров.
+
+```tsx
+const activeCaptions = useActiveCues(cues, 'caption');
+const currentText = activeCaptions[0]?.payload?.text;
+return <div>{currentText}</div>;
+```
+
+### 23.6 Демо и рендер
+
+- Пример: `examples/data-driven-timeline.tsx` — музыка (SoundHelix) с ducking'ом, озвучка, SFX (`pop`, `beep`), субтитры и стикеры из одного массива `cues`.
+- `npm run render:timeline` → `render/out/data-driven-timeline.mp4` (H.264 1280×720 + AAC), плюс ключевые кадры. Скрипт скачивает медиа в `render/public/audio/` и переписывает удалённые URL на `staticFile(...)`.
+- E2E: `render/timeline.e2e.test.ts` проверяет контейнер и аудиодорожку (`mp4a`).
+- Версия с реальной озвучкой: `examples/voiceover-animation.tsx` + `npm run render:voiceover` (см. раздел 21.5).
+
+### 23.7 Интеграция с редактором (`inputProps`)
+
+Массив `cues` можно держать в состоянии UI и передавать в сцену через `inputProps`. Сцена получает его напрямую пропсами (`export default function Scene({ cues })`), поэтому при изменении массива плеер обновляет кадр **без перекомпиляции TSX** (поле `code` не меняется).
+
+```tsx
+import { useState } from 'react';
+import * as Remotion from 'remotion';
+import * as Timeline from 'browser-tsx-sandbox';
+import { PlayerSandbox } from 'browser-tsx-sandbox/player';
+import type { Cue } from 'browser-tsx-sandbox';
+
+function Editor({ sceneCode, assets }: { sceneCode: string; assets: Record<string, string> }) {
+  const [cues, setCues] = useState<Cue[]>([]);
+
+  const addCue = (type: string, startFrame: number) =>
+    setCues((prev) => [
+      ...prev,
+      { id: `${type}-${prev.length}`, type, startFrame, payload: {} },
+    ]);
+
+  return (
+    <>
+      <button onClick={() => addCue('sfx', 30)}>+ SFX</button>
+      <PlayerSandbox
+        config={{
+          code: sceneCode, // НЕ меняется
+          assets,
+          modules: { remotion: Remotion, 'browser-tsx-sandbox': Timeline },
+          inputProps: { cues }, // обновляется на каждое изменение
+          durationInFrames: 300,
+          fps: 30,
+        }}
+      />
+    </>
+  );
+}
+```
+
+Сцена:
+
+```tsx
+import { AbsoluteFill } from 'remotion';
+import { MusicLayer, SFXLayer, TrackLayer, useActiveCues } from 'browser-tsx-sandbox';
+
+export default function Scene({ cues = [] }) {
+  const caption = useActiveCues(cues, 'caption')[0]?.payload?.text;
+  return (
+    <AbsoluteFill>
+      <MusicLayer cues={cues} volumeDucking={(frame) => 1} />
+      <SFXLayer cues={cues} globalVolume={0.9} />
+      <TrackLayer cues={cues} type="sticker" renderCue={(cue) => <Sticker cue={cue} />} />
+      {caption ? <Caption text={caption} /> : null}
+    </AbsoluteFill>
+  );
+}
+```

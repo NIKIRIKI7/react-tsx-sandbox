@@ -9,6 +9,10 @@ render/bundle-widgets/
 render/bundle-props/
 render/bundle-cdn/
 render/bundle-showcase/
+render/bundle-audio/
+render/bundle-animation/
+render/bundle-timeline/
+render/bundle-voiceover/
 render/.generated/
 render/public/
 demo/dist/

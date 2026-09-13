@@ -48,9 +48,34 @@ export {
   TimelineBar,
   VolumeControl,
 } from './react/headless/Primitives';
+export type {
+  PlayPauseButtonProps,
+  PlayPauseButtonRenderProps,
+  TimeDisplayProps,
+  TimeDisplayRenderProps,
+  TimelineBarProps,
+  TimelineBarRenderProps,
+  VolumeControlProps,
+  VolumeControlRenderProps,
+} from './react/headless/Primitives';
 
 export { extractAssetZip, createAssetUrlMap, releaseAssetUrls } from './assets/zip';
 export type { AssetArchive } from './assets/zip';
+
+export {
+  useActiveCues,
+  SFXLayer,
+  MusicLayer,
+  TrackLayer,
+} from './timeline/index';
+export type {
+  Cue,
+  AudioPayload,
+  SFXPayload,
+  SFXLayerProps,
+  MusicLayerProps,
+  TrackLayerProps,
+} from './timeline/index';
 
 export * from './core/types';
 export * from './core/errors';
