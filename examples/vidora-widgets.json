@@ -1,0 +1,297 @@
+{
+  "vidora_schema_version": "1.0",
+  "exported_at": "2026-08-31T20:10:00Z",
+  "generator": "Vidora Motion Studio",
+  "widgets": [
+    {
+      "id": "WordByWordText16x9",
+      "name": "Word By Word Kinetic Text (16:9)",
+      "category": "narrative",
+      "description": "Эргономичная пословная кинетическая анимация из After Effects (Based On: Words) на прозрачном фоне (16:9). Тайминги появления каждого слова, удержания (Hold) и выхода динамически рассчитываются на всю длину видео (например, 10 сек / 300 кадров), обеспечивая плавный вылет слов (Ramp Up, Ease High 25%, Ease Low 100%), вертикальный Motion Blur и корректные пробелы между словами.",
+      "import_path": "../widgets",
+      "is_custom": true,
+      "props": [
+        {
+          "name": "texts",
+          "type": "object",
+          "required": false,
+          "default": [
+            { "text": "ONE TWO THREE" },
+            { "text": "WORD BY WORD" },
+            { "text": "TEXT ANIMATION" }
+          ],
+          "description": "Массив текстов: [{ text: 'ONE TWO THREE' }, { text: 'WORD BY WORD' }]"
+        },
+        {
+          "name": "displayMode",
+          "type": "enum",
+          "required": false,
+          "default": "sequential",
+          "enum_values": ["sequential", "stacked"],
+          "description": "Режим отображения: sequential (поочередная смена фраз) или stacked (многострочный стек)"
+        },
+        {
+          "name": "textColor",
+          "type": "string",
+          "required": false,
+          "default": "#ffffff",
+          "description": "Цвет текста (HEX / RGBA)"
+        },
+        {
+          "name": "fontSize",
+          "type": "number",
+          "required": false,
+          "default": 110,
+          "description": "Размер шрифта текста (в px)"
+        },
+        {
+          "name": "fontWeight",
+          "type": "number",
+          "required": false,
+          "default": 800,
+          "description": "Толщина шрифта (600, 700, 800, 900)"
+        },
+        {
+          "name": "translateDistance",
+          "type": "number",
+          "required": false,
+          "default": 85,
+          "description": "Дистанция вылета слов по оси Y (в px)"
+        },
+        {
+          "name": "motionBlurAmount",
+          "type": "number",
+          "required": false,
+          "default": 18,
+          "description": "Сила вертикального Motion Blur (в px)"
+        },
+        {
+          "name": "wordStagger",
+          "type": "number",
+          "required": false,
+          "default": 4.5,
+          "description": "Базовая задержка появления между словами (в кадрах)"
+        },
+        {
+          "name": "enableMotionBlur",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "Включить направленный вертикальный Motion Blur"
+        },
+        {
+          "name": "enableScaleDolly",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "Плавный микро-наезд камеры на текст на протяжении всего хронометража"
+        },
+        {
+          "name": "animation",
+          "type": "enum",
+          "required": false,
+          "default": "ramp-up-rise",
+          "enum_values": ["ramp-up-rise", "ramp-down-drop", "kinetic-fade"],
+          "description": "Направление анимации слов"
+        },
+        {
+          "name": "durationFrames",
+          "type": "number",
+          "required": false,
+          "default": 300,
+          "description": "Общая длительность в кадрах (300 = 10 сек при 30 FPS)"
+        },
+        {
+          "name": "delayFrames",
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "description": "Задержка старта в кадрах"
+        },
+        {
+          "name": "scale",
+          "type": "number",
+          "required": false,
+          "default": 1.0,
+          "description": "Общий множитель масштаба"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Дополнительные Tailwind классы"
+        }
+      ],
+      "default_props": {
+        "texts": [
+          { "text": "ONE TWO THREE" },
+          { "text": "WORD BY WORD" },
+          { "text": "TEXT ANIMATION" }
+        ],
+        "displayMode": "sequential",
+        "textColor": "#ffffff",
+        "fontSize": 110,
+        "fontWeight": 800,
+        "translateDistance": 85,
+        "motionBlurAmount": 18,
+        "wordStagger": 4.5,
+        "enableMotionBlur": true,
+        "enableScaleDolly": true,
+        "animation": "ramp-up-rise",
+        "durationFrames": 300,
+        "delayFrames": 0,
+        "scale": 1.0,
+        "className": ""
+      },
+      "example_snippet": "<WordByWordText16x9 texts={[{ text: \"ONE TWO THREE\" }, { text: \"WORD BY WORD\" }]} fontSize={110} durationFrames={300} />",
+      "tags": ["after-effects", "word-by-word", "kinetic-typography", "motion-blur", "ramp-up", "dynamic-timing", "transparent", "16:9"],
+      "tsx_code": "import React from 'react';\nimport { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';\n\nexport interface TextItem {\n  text: string;\n  color?: string;\n  fontSize?: number;\n}\n\nexport interface WordByWordText16x9Props {\n  texts?: TextItem[] | string[] | any;\n  displayMode?: 'sequential' | 'stacked';\n  textColor?: string;\n  fontSize?: number;\n  fontWeight?: number;\n  translateDistance?: number;\n  motionBlurAmount?: number;\n  wordStagger?: number;\n  enableMotionBlur?: boolean;\n  enableScaleDolly?: boolean;\n  animation?: 'ramp-up-rise' | 'ramp-down-drop' | 'kinetic-fade';\n  durationFrames?: number;\n  delayFrames?: number;\n  scale?: number;\n  className?: string;\n}\n\nconst extractTextItems = (input: any, defaultColor = '#ffffff'): TextItem[] => {\n  if (!input) return [];\n\n  if (Array.isArray(input)) {\n    return input\n      .map((item) => {\n        if (typeof item === 'string') return { text: item.trim(), color: defaultColor };\n        if (item && typeof item === 'object') {\n          const val =\n            item.text ??\n            item.title ??\n            item.value ??\n            item.name ??\n            Object.values(item)[0] ??\n            '';\n          return {\n            text: String(val).trim(),\n            color: item.color || defaultColor,\n            fontSize: item.fontSize,\n          };\n        }\n        return { text: String(item).trim(), color: defaultColor };\n      })\n      .filter((i) => i.text.length > 0);\n  }\n\n  if (typeof input === 'object') {\n    const values = Object.values(input);\n    if (values.length > 0) {\n      return extractTextItems(values, defaultColor);\n    }\n  }\n\n  if (typeof input === 'string') {\n    const clean = input.trim();\n    if (!clean) return [];\n\n    try {\n      const parsed = JSON.parse(clean);\n      const result = extractTextItems(parsed, defaultColor);\n      if (result.length > 0) return result;\n    } catch (_) {}\n\n    if (clean.indexOf('text') !== -1) {\n      const extracted: TextItem[] = [];\n      const segments = clean.split('text');\n      for (let i = 1; i < segments.length; i++) {\n        const seg = segments[i];\n        const colonIdx = seg.indexOf(':');\n        if (colonIdx !== -1) {\n          const afterColon = seg.slice(colonIdx + 1).trim();\n          const quoteChar =\n            afterColon.charAt(0) === \"'\" ? \"'\" : afterColon.charAt(0) === '\"' ? '\"' : null;\n          if (quoteChar) {\n            const secondQuote = afterColon.indexOf(quoteChar, 1);\n            if (secondQuote !== -1) {\n              const val = afterColon.slice(1, secondQuote).trim();\n              if (val) extracted.push({ text: val, color: defaultColor });\n            }\n          }\n        }\n      }\n      if (extracted.length > 0) return extracted;\n    }\n\n    const parts = clean\n      .replace(/[{}\\[\\]'\"]/g, '')\n      .split(',')\n      .map((s) => s.trim())\n      .filter((s) => s.length > 0);\n\n    if (parts.length > 0) {\n      return parts.map((t) => ({ text: t, color: defaultColor }));\n    }\n  }\n\n  return [];\n};\n\nexport const WordByWordText16x9: React.FC<WordByWordText16x9Props> = ({\n  texts,\n  displayMode = 'sequential',\n  textColor = '#ffffff',\n  fontSize = 110,\n  fontWeight = 800,\n  translateDistance = 85,\n  motionBlurAmount = 18,\n  wordStagger = 4.5,\n  enableMotionBlur = true,\n  enableScaleDolly = true,\n  animation = 'ramp-up-rise',\n  durationFrames,\n  delayFrames = 0,\n  scale = 1.0,\n  className = '',\n}) => {\n  let frame = 0;\n  let fps = 30;\n  let compositionDuration = 300;\n\n  try {\n    const vConfig = useVideoConfig();\n    fps = vConfig.fps || 30;\n    compositionDuration = vConfig.durationInFrames || 300;\n  } catch (_) {}\n\n  try {\n    frame = useCurrentFrame();\n  } catch (_) {}\n\n  const totalDuration = Number(durationFrames) || compositionDuration;\n  const activeDuration = Math.max(1, totalDuration - Number(delayFrames || 0));\n  const currentFrame = Math.max(0, frame - Number(delayFrames || 0));\n\n  const parsed = extractTextItems(texts, textColor);\n  const defaultList: TextItem[] = [\n    { text: 'ONE TWO THREE', color: textColor },\n    { text: 'WORD BY WORD', color: textColor },\n    { text: 'TEXT ANIMATION', color: textColor },\n  ];\n  const visibleTexts = parsed.length > 0 ? parsed : defaultList;\n  const N = visibleTexts.length;\n\n  const slotDuration = activeDuration / N;\n\n  const renderPhrase = (item: TextItem, idx: number) => {\n    const itemStart = idx * slotDuration;\n    const itemEnd = (idx + 1) * slotDuration;\n    const localFrame = currentFrame - itemStart;\n\n    const entranceDuration = Math.max(18, Math.min(40, Math.floor(slotDuration * 0.28)));\n    const exitDuration = Math.max(14, Math.min(30, Math.floor(slotDuration * 0.20)));\n    const crossOverlap = N > 1 && idx < N - 1 ? Math.floor(exitDuration * 0.75) : 0;\n    const exitStart = slotDuration - exitDuration;\n\n    if (displayMode === 'sequential' && N > 1) {\n      if (localFrame < -2 || currentFrame > itemEnd + crossOverlap + 2) {\n        return null;\n      }\n    }\n\n    const words = item.text.trim().split(/\\s+/);\n    const wordCount = words.length;\n\n    const effectiveWordStagger = Math.min(\n      Number(wordStagger || 4.5),\n      (entranceDuration * 0.6) / Math.max(1, wordCount)\n    );\n\n    const itemFontSize = item.fontSize || fontSize;\n\n    const dollyProgress = interpolate(\n      Math.max(0, Math.min(slotDuration, localFrame)),\n      [0, slotDuration],\n      [0.98, 1.025],\n      { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n    );\n    const dollyScale = enableScaleDolly ? dollyProgress : 1.0;\n\n    return (\n      <div\n        key={idx}\n        className={`${displayMode === 'sequential' && N > 1 ? 'absolute inset-0' : 'relative'} flex items-center justify-center flex-wrap text-center select-none will-change-transform`}\n        style={{\n          fontFamily: \"-apple-system, BlinkMacSystemFont, 'Montserrat', 'SF Pro Display', sans-serif\",\n          fontSize: `${itemFontSize}px`,\n          fontWeight,\n          letterSpacing: '-0.025em',\n          lineHeight: 1.15,\n          color: item.color || textColor,\n          transform: `scale(${dollyScale})`,\n          transformOrigin: 'center center',\n        }}\n      >\n        {words.map((word, wordIdx) => {\n          const wordDelay = wordIdx * effectiveWordStagger;\n\n          const linearEntrance = interpolate(\n            localFrame - wordDelay,\n            [0, entranceDuration - wordDelay * 0.3],\n            [0, 1],\n            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n          );\n          const wordEntrance = 1 - Math.pow(1 - linearEntrance, 3.2);\n\n          const exitWordDelay = wordIdx * (effectiveWordStagger * 0.4);\n          const linearExit = interpolate(\n            localFrame,\n            [exitStart + exitWordDelay, exitStart + exitWordDelay + exitDuration],\n            [0, 1],\n            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n          );\n          const wordExit = Math.pow(linearExit, 2.2);\n\n          const activeOpacity = Math.max(0, Math.min(1, wordEntrance * (1 - wordExit)));\n\n          let yDir = 1;\n          if (animation === 'ramp-down-drop') yDir = -1;\n          if (animation === 'kinetic-fade') yDir = 0;\n\n          const translateY =\n            (1 - wordEntrance) * translateDistance * yDir -\n            wordExit * (translateDistance * 0.45 * yDir);\n\n          const velocityRatio = Math.max(0, 1 - wordEntrance) + wordExit * 0.6;\n          const verticalBlur = enableMotionBlur ? velocityRatio * motionBlurAmount : 0;\n          const isLastWord = wordIdx === words.length - 1;\n\n          return (\n            <span\n              key={wordIdx}\n              className=\"inline-block whitespace-nowrap will-change-transform\"\n              style={{\n                transform: `translate3d(0, ${translateY}px, 0)`,\n                filter: verticalBlur > 0.5 ? `blur(0px ${verticalBlur}px)` : 'none',\n                opacity: activeOpacity,\n                marginRight: isLastWord ? '0px' : '0.35em',\n              }}\n            >\n              {word}\n            </span>\n          );\n        })}\n      </div>\n    );\n  };\n\n  return (\n    <div\n      className={`relative flex items-center justify-center select-none bg-transparent ${className}`}\n      style={{\n        width: '100%',\n        minHeight: `${fontSize * 1.5}px`,\n        transform: `scale(${Number(scale || 1)})`,\n        transformOrigin: 'center center',\n      }}\n    >\n      {displayMode === 'sequential' && N > 1 ? (\n        <div className=\"relative w-full h-full flex items-center justify-center\">\n          {visibleTexts.map((item, idx) => renderPhrase(item, idx))}\n        </div>\n      ) : (\n        <div className=\"flex flex-col items-center justify-center gap-6\">\n          {visibleTexts.map((item, idx) => renderPhrase(item, idx))}\n        </div>\n      )}\n    </div>\n  );\n};"
+    },
+    {
+      "id": "WordByWordText9x16",
+      "name": "Word By Word Kinetic Text (9:16 Shorts)",
+      "category": "narrative",
+      "description": "Крупная пословная кинетическая анимация для Shorts/Reels/TikTok на прозрачном фоне (9:16). Тайминги появления слов и чтения эргономично масштабируются под всю длину видео с сохранением физики Ramp Up, вертикального Motion Blur и корректными пробелами между словами.",
+      "import_path": "../widgets",
+      "is_custom": true,
+      "props": [
+        {
+          "name": "texts",
+          "type": "object",
+          "required": false,
+          "default": [
+            { "text": "ONE TWO THREE" },
+            { "text": "WORD BY WORD" },
+            { "text": "TEXT ANIMATION" }
+          ],
+          "description": "Массив текстов: [{ text: 'ONE TWO THREE' }, { text: 'WORD BY WORD' }]"
+        },
+        {
+          "name": "displayMode",
+          "type": "enum",
+          "required": false,
+          "default": "sequential",
+          "enum_values": ["sequential", "stacked"],
+          "description": "Режим отображения: sequential (поочередная смена фраз) или stacked (многострочный стек)"
+        },
+        {
+          "name": "textColor",
+          "type": "string",
+          "required": false,
+          "default": "#ffffff",
+          "description": "Цвет текста (HEX / RGBA)"
+        },
+        {
+          "name": "fontSize",
+          "type": "number",
+          "required": false,
+          "default": 130,
+          "description": "Размер шрифта для мобильного формата (в px)"
+        },
+        {
+          "name": "fontWeight",
+          "type": "number",
+          "required": false,
+          "default": 900,
+          "description": "Толщина шрифта"
+        },
+        {
+          "name": "translateDistance",
+          "type": "number",
+          "required": false,
+          "default": 100,
+          "description": "Дистанция вылета слов по оси Y (в px)"
+        },
+        {
+          "name": "motionBlurAmount",
+          "type": "number",
+          "required": false,
+          "default": 22,
+          "description": "Сила вертикального Motion Blur (в px)"
+        },
+        {
+          "name": "wordStagger",
+          "type": "number",
+          "required": false,
+          "default": 4.5,
+          "description": "Базовая задержка появления между словами (в кадрах)"
+        },
+        {
+          "name": "enableMotionBlur",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "Включить направленный вертикальный Motion Blur"
+        },
+        {
+          "name": "enableScaleDolly",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "Плавный наезд камеры на текст"
+        },
+        {
+          "name": "animation",
+          "type": "enum",
+          "required": false,
+          "default": "ramp-up-rise",
+          "enum_values": ["ramp-up-rise", "ramp-down-drop", "kinetic-fade"],
+          "description": "Направление анимации слов"
+        },
+        {
+          "name": "durationFrames",
+          "type": "number",
+          "required": false,
+          "default": 300,
+          "description": "Общая длительность в кадрах (300 = 10 сек при 30 FPS)"
+        },
+        {
+          "name": "delayFrames",
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "description": "Задержка старта в кадрах"
+        },
+        {
+          "name": "scale",
+          "type": "number",
+          "required": false,
+          "default": 1.0,
+          "description": "Общий множитель масштаба"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Дополнительные Tailwind классы"
+        }
+      ],
+      "default_props": {
+        "texts": [
+          { "text": "ONE TWO THREE" },
+          { "text": "WORD BY WORD" },
+          { "text": "TEXT ANIMATION" }
+        ],
+        "displayMode": "sequential",
+        "textColor": "#ffffff",
+        "fontSize": 130,
+        "fontWeight": 900,
+        "translateDistance": 100,
+        "motionBlurAmount": 22,
+        "wordStagger": 4.5,
+        "enableMotionBlur": true,
+        "enableScaleDolly": true,
+        "animation": "ramp-up-rise",
+        "durationFrames": 300,
+        "delayFrames": 0,
+        "scale": 1.0,
+        "className": ""
+      },
+      "example_snippet": "<WordByWordText9x16 texts={[{ text: \"ONE TWO THREE\" }, { text: \"WORD BY WORD\" }]} fontSize={130} durationFrames={300} />",
+      "tags": ["after-effects", "word-by-word", "kinetic-typography", "motion-blur", "ramp-up", "shorts", "reels", "tiktok", "transparent", "9:16"],
+      "tsx_code": "import React from 'react';\nimport { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';\n\nexport interface TextItem {\n  text: string;\n  color?: string;\n  fontSize?: number;\n}\n\nexport interface WordByWordText9x16Props {\n  texts?: TextItem[] | string[] | any;\n  displayMode?: 'sequential' | 'stacked';\n  textColor?: string;\n  fontSize?: number;\n  fontWeight?: number;\n  translateDistance?: number;\n  motionBlurAmount?: number;\n  wordStagger?: number;\n  enableMotionBlur?: boolean;\n  enableScaleDolly?: boolean;\n  animation?: 'ramp-up-rise' | 'ramp-down-drop' | 'kinetic-fade';\n  durationFrames?: number;\n  delayFrames?: number;\n  scale?: number;\n  className?: string;\n}\n\nconst extractTextItems = (input: any, defaultColor = '#ffffff'): TextItem[] => {\n  if (!input) return [];\n\n  if (Array.isArray(input)) {\n    return input\n      .map((item) => {\n        if (typeof item === 'string') return { text: item.trim(), color: defaultColor };\n        if (item && typeof item === 'object') {\n          const val =\n            item.text ??\n            item.title ??\n            item.value ??\n            item.name ??\n            Object.values(item)[0] ??\n            '';\n          return {\n            text: String(val).trim(),\n            color: item.color || defaultColor,\n            fontSize: item.fontSize,\n          };\n        }\n        return { text: String(item).trim(), color: defaultColor };\n      })\n      .filter((i) => i.text.length > 0);\n  }\n\n  if (typeof input === 'object') {\n    const values = Object.values(input);\n    if (values.length > 0) {\n      return extractTextItems(values, defaultColor);\n    }\n  }\n\n  if (typeof input === 'string') {\n    const clean = input.trim();\n    if (!clean) return [];\n\n    try {\n      const parsed = JSON.parse(clean);\n      const result = extractTextItems(parsed, defaultColor);\n      if (result.length > 0) return result;\n    } catch (_) {}\n\n    if (clean.indexOf('text') !== -1) {\n      const extracted: TextItem[] = [];\n      const segments = clean.split('text');\n      for (let i = 1; i < segments.length; i++) {\n        const seg = segments[i];\n        const colonIdx = seg.indexOf(':');\n        if (colonIdx !== -1) {\n          const afterColon = seg.slice(colonIdx + 1).trim();\n          const quoteChar =\n            afterColon.charAt(0) === \"'\" ? \"'\" : afterColon.charAt(0) === '\"' ? '\"' : null;\n          if (quoteChar) {\n            const secondQuote = afterColon.indexOf(quoteChar, 1);\n            if (secondQuote !== -1) {\n              const val = afterColon.slice(1, secondQuote).trim();\n              if (val) extracted.push({ text: val, color: defaultColor });\n            }\n          }\n        }\n      }\n      if (extracted.length > 0) return extracted;\n    }\n\n    const parts = clean\n      .replace(/[{}\\[\\]'\"]/g, '')\n      .split(',')\n      .map((s) => s.trim())\n      .filter((s) => s.length > 0);\n\n    if (parts.length > 0) {\n      return parts.map((t) => ({ text: t, color: defaultColor }));\n    }\n  }\n\n  return [];\n};\n\nexport const WordByWordText9x16: React.FC<WordByWordText9x16Props> = ({\n  texts,\n  displayMode = 'sequential',\n  textColor = '#ffffff',\n  fontSize = 130,\n  fontWeight = 900,\n  translateDistance = 100,\n  motionBlurAmount = 22,\n  wordStagger = 4.5,\n  enableMotionBlur = true,\n  enableScaleDolly = true,\n  animation = 'ramp-up-rise',\n  durationFrames,\n  delayFrames = 0,\n  scale = 1.0,\n  className = '',\n}) => {\n  let frame = 0;\n  let fps = 30;\n  let compositionDuration = 300;\n\n  try {\n    const vConfig = useVideoConfig();\n    fps = vConfig.fps || 30;\n    compositionDuration = vConfig.durationInFrames || 300;\n  } catch (_) {}\n\n  try {\n    frame = useCurrentFrame();\n  } catch (_) {}\n\n  const totalDuration = Number(durationFrames) || compositionDuration;\n  const activeDuration = Math.max(1, totalDuration - Number(delayFrames || 0));\n  const currentFrame = Math.max(0, frame - Number(delayFrames || 0));\n\n  const parsed = extractTextItems(texts, textColor);\n  const defaultList: TextItem[] = [\n    { text: 'ONE TWO THREE', color: textColor },\n    { text: 'WORD BY WORD', color: textColor },\n    { text: 'TEXT ANIMATION', color: textColor },\n  ];\n  const visibleTexts = parsed.length > 0 ? parsed : defaultList;\n  const N = visibleTexts.length;\n\n  const slotDuration = activeDuration / N;\n\n  const renderPhrase = (item: TextItem, idx: number) => {\n    const itemStart = idx * slotDuration;\n    const itemEnd = (idx + 1) * slotDuration;\n    const localFrame = currentFrame - itemStart;\n\n    const entranceDuration = Math.max(18, Math.min(40, Math.floor(slotDuration * 0.28)));\n    const exitDuration = Math.max(14, Math.min(30, Math.floor(slotDuration * 0.20)));\n    const crossOverlap = N > 1 && idx < N - 1 ? Math.floor(exitDuration * 0.75) : 0;\n    const exitStart = slotDuration - exitDuration;\n\n    if (displayMode === 'sequential' && N > 1) {\n      if (localFrame < -2 || currentFrame > itemEnd + crossOverlap + 2) {\n        return null;\n      }\n    }\n\n    const words = item.text.trim().split(/\\s+/);\n    const wordCount = words.length;\n\n    const effectiveWordStagger = Math.min(\n      Number(wordStagger || 4.5),\n      (entranceDuration * 0.6) / Math.max(1, wordCount)\n    );\n\n    const itemFontSize = item.fontSize || fontSize;\n\n    const dollyProgress = interpolate(\n      Math.max(0, Math.min(slotDuration, localFrame)),\n      [0, slotDuration],\n      [0.98, 1.03],\n      { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n    );\n    const dollyScale = enableScaleDolly ? dollyProgress : 1.0;\n\n    return (\n      <div\n        key={idx}\n        className={`${displayMode === 'sequential' && N > 1 ? 'absolute inset-0' : 'relative'} flex items-center justify-center flex-wrap text-center select-none px-4 will-change-transform`}\n        style={{\n          fontFamily: \"-apple-system, BlinkMacSystemFont, 'Montserrat', 'SF Pro Display', sans-serif\",\n          fontSize: `${itemFontSize}px`,\n          fontWeight,\n          letterSpacing: '-0.03em',\n          lineHeight: 1.15,\n          color: item.color || textColor,\n          transform: `scale(${dollyScale})`,\n          transformOrigin: 'center center',\n        }}\n      >\n        {words.map((word, wordIdx) => {\n          const wordDelay = wordIdx * effectiveWordStagger;\n\n          const linearEntrance = interpolate(\n            localFrame - wordDelay,\n            [0, entranceDuration - wordDelay * 0.3],\n            [0, 1],\n            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n          );\n          const wordEntrance = 1 - Math.pow(1 - linearEntrance, 3.2);\n\n          const exitWordDelay = wordIdx * (effectiveWordStagger * 0.4);\n          const linearExit = interpolate(\n            localFrame,\n            [exitStart + exitWordDelay, exitStart + exitWordDelay + exitDuration],\n            [0, 1],\n            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n          );\n          const wordExit = Math.pow(linearExit, 2.2);\n\n          const activeOpacity = Math.max(0, Math.min(1, wordEntrance * (1 - wordExit)));\n\n          let yDir = 1;\n          if (animation === 'ramp-down-drop') yDir = -1;\n          if (animation === 'kinetic-fade') yDir = 0;\n\n          const translateY =\n            (1 - wordEntrance) * translateDistance * yDir -\n            wordExit * (translateDistance * 0.45 * yDir);\n\n          const velocityRatio = Math.max(0, 1 - wordEntrance) + wordExit * 0.6;\n          const verticalBlur = enableMotionBlur ? velocityRatio * motionBlurAmount : 0;\n          const isLastWord = wordIdx === words.length - 1;\n\n          return (\n            <span\n              key={wordIdx}\n              className=\"inline-block whitespace-nowrap will-change-transform\"\n              style={{\n                transform: `translate3d(0, ${translateY}px, 0)`,\n                filter: verticalBlur > 0.5 ? `blur(0px ${verticalBlur}px)` : 'none',\n                opacity: activeOpacity,\n                marginRight: isLastWord ? '0px' : '0.35em',\n              }}\n            >\n              {word}\n            </span>\n          );\n        })}\n      </div>\n    );\n  };\n\n  return (\n    <div\n      className={`relative flex items-center justify-center select-none bg-transparent px-4 ${className}`}\n      style={{\n        width: '100%',\n        minHeight: `${fontSize * 1.5}px`,\n        transform: `scale(${Number(scale || 1)})`,\n        transformOrigin: 'center center',\n      }}\n    >\n      {displayMode === 'sequential' && N > 1 ? (\n        <div className=\"relative w-full h-full flex items-center justify-center\">\n          {visibleTexts.map((item, idx) => renderPhrase(item, idx))}\n        </div>\n      ) : (\n        <div className=\"flex flex-col items-center justify-center gap-6\">\n          {visibleTexts.map((item, idx) => renderPhrase(item, idx))}\n        </div>\n      )}\n    </div>\n  );\n};"
+    }
+  ]
+}

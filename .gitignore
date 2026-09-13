@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+render/out/
+render/bundle/
+render/bundle-assets/
+render/bundle-example/
+render/bundle-widgets/
+render/bundle-props/
+render/.generated/
+render/public/
+*.log
+*.tgz
+.DS_Store
+.serena/

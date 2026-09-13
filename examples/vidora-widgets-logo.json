@@ -1,0 +1,327 @@
+{
+  "vidora_schema_version": "1.0",
+  "exported_at": "2026-08-30T23:59:59Z",
+  "generator": "Vidora Motion Studio",
+  "widgets": [
+    {
+      "id": "LogoShineBadge16x9",
+      "name": "Premiere Style Logo Shine & Sheen (16:9)",
+      "category": "social",
+      "description": "Премиальная анимация глянцевого логотипа/иконки со световым бликом (Shine / Light Sweep Effect) из Premiere Pro на прозрачном фоне (16:9). Включает настраиваемый угол и ширину луча, мягкое свечение, 3D-микропарение и поддержку любого текста или иконки Lucide.",
+      "import_path": "../widgets",
+      "is_custom": true,
+      "props": [
+        {
+          "name": "logoText",
+          "type": "string",
+          "required": false,
+          "default": "Pr",
+          "description": "Текст или аббревиатура логотипа (например: Pr, Ae, Ps, Ai)"
+        },
+        {
+          "name": "iconName",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Имя иконки из Lucide React (если указано, заменяет текст логотипа, например: Play, Film, Video, Sparkles)"
+        },
+        {
+          "name": "imageUrl",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Опциональный URL собственного изображения/логотипа"
+        },
+        {
+          "name": "badgeBgColor",
+          "type": "string",
+          "required": false,
+          "default": "#00005c",
+          "description": "Начальный цвет фона иконки (Top-Left)"
+        },
+        {
+          "name": "badgeBgGradEnd",
+          "type": "string",
+          "required": false,
+          "default": "#000028",
+          "description": "Конечный цвет фона иконки (Bottom-Right)"
+        },
+        {
+          "name": "badgeBorderColor",
+          "type": "string",
+          "required": false,
+          "default": "#3b3bcf",
+          "description": "Цвет рамки и фаски бейджа"
+        },
+        {
+          "name": "logoColor",
+          "type": "string",
+          "required": false,
+          "default": "#9999ff",
+          "description": "Цвет текста логотипа или иконки"
+        },
+        {
+          "name": "sheenColor",
+          "type": "string",
+          "required": false,
+          "default": "#ffffff",
+          "description": "Цвет светового блика (Sheen / Light Sweep)"
+        },
+        {
+          "name": "glowColor",
+          "type": "string",
+          "required": false,
+          "default": "#4b4bff",
+          "description": "Цвет фонового неонового ореола"
+        },
+        {
+          "name": "sheenAngle",
+          "type": "number",
+          "required": false,
+          "default": -25,
+          "description": "Угол наклона светового блика в градусах"
+        },
+        {
+          "name": "sheenWidth",
+          "type": "number",
+          "required": false,
+          "default": 110,
+          "description": "Ширина светового луча блика (в px)"
+        },
+        {
+          "name": "sheenFrequency",
+          "type": "number",
+          "required": false,
+          "default": 3,
+          "description": "Количество проходов блика за время ролика"
+        },
+        {
+          "name": "size",
+          "type": "number",
+          "required": false,
+          "default": 320,
+          "description": "Размер иконки логотипа в пикселях"
+        },
+        {
+          "name": "animation",
+          "type": "enum",
+          "required": false,
+          "default": "spring-pop",
+          "enum_values": ["spring-pop", "smooth-fade", "cyber-drop"],
+          "description": "Тип физической анимации появления"
+        },
+        {
+          "name": "durationFrames",
+          "type": "number",
+          "required": false,
+          "default": 300,
+          "description": "Общая длительность в кадрах (300 = 10 сек при 30 FPS)"
+        },
+        {
+          "name": "delayFrames",
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "description": "Задержка старта в кадрах"
+        },
+        {
+          "name": "scale",
+          "type": "number",
+          "required": false,
+          "default": 1.0,
+          "description": "Общий множитель масштаба"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Дополнительные Tailwind классы"
+        }
+      ],
+      "default_props": {
+        "logoText": "Pr",
+        "iconName": "",
+        "imageUrl": "",
+        "badgeBgColor": "#00005c",
+        "badgeBgGradEnd": "#000028",
+        "badgeBorderColor": "#3b3bcf",
+        "logoColor": "#9999ff",
+        "sheenColor": "#ffffff",
+        "glowColor": "#4b4bff",
+        "sheenAngle": -25,
+        "sheenWidth": 110,
+        "sheenFrequency": 3,
+        "size": 320,
+        "animation": "spring-pop",
+        "durationFrames": 300,
+        "delayFrames": 0,
+        "scale": 1.0,
+        "className": ""
+      },
+      "example_snippet": "<LogoShineBadge16x9 logoText=\"Pr\" badgeBgColor=\"#00005c\" logoColor=\"#9999ff\" size={320} durationFrames={300} />",
+      "tags": ["premiere-pro", "shine-effect", "light-sweep", "logo", "badge", "icon", "glossy", "16:9"],
+      "tsx_code": "import React from 'react';\nimport { interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';\nimport * as LucideIcons from 'lucide-react';\n\nexport interface LogoShineBadge16x9Props {\n  logoText?: string;\n  iconName?: string;\n  imageUrl?: string;\n  badgeBgColor?: string;\n  badgeBgGradEnd?: string;\n  badgeBorderColor?: string;\n  logoColor?: string;\n  sheenColor?: string;\n  glowColor?: string;\n  sheenAngle?: number;\n  sheenWidth?: number;\n  sheenFrequency?: number;\n  size?: number;\n  animation?: 'spring-pop' | 'smooth-fade' | 'cyber-drop';\n  durationFrames?: number;\n  delayFrames?: number;\n  scale?: number;\n  className?: string;\n}\n\nexport const LogoShineBadge16x9: React.FC<LogoShineBadge16x9Props> = ({\n  logoText = 'Pr',\n  iconName = '',\n  imageUrl = '',\n  badgeBgColor = '#00005c',\n  badgeBgGradEnd = '#000028',\n  badgeBorderColor = '#3b3bcf',\n  logoColor = '#9999ff',\n  sheenColor = '#ffffff',\n  glowColor = '#4b4bff',\n  sheenAngle = -25,\n  sheenWidth = 110,\n  sheenFrequency = 3,\n  size = 320,\n  animation = 'spring-pop',\n  durationFrames,\n  delayFrames = 0,\n  scale = 1.0,\n  className = '',\n}) => {\n  let frame = 0;\n  let fps = 30;\n  let compositionDuration = 300;\n\n  try {\n    const vConfig = useVideoConfig();\n    fps = vConfig.fps || 30;\n    compositionDuration = vConfig.durationInFrames || 300;\n  } catch (_) {}\n\n  try {\n    frame = useCurrentFrame();\n  } catch (_) {}\n\n  const totalDuration = Number(durationFrames) || compositionDuration;\n  const activeDuration = Math.max(1, totalDuration - Number(delayFrames || 0));\n  const currentFrame = Math.max(0, frame - Number(delayFrames || 0));\n\n  // Фазы: Вход -> Парение и циклический блик -> Выход\n  const entranceEnd = Math.min(28, Math.floor(activeDuration * 0.16));\n  const exitStart = Math.max(entranceEnd + 30, activeDuration - Math.min(32, Math.floor(activeDuration * 0.16)));\n\n  const entranceSpring = spring({\n    frame: currentFrame,\n    fps,\n    config: animation === 'cyber-drop'\n      ? { stiffness: 220, damping: 12, mass: 0.9 }\n      : { stiffness: 160, damping: 14, mass: 0.8 },\n  });\n\n  const exitProgress = interpolate(\n    currentFrame,\n    [exitStart, activeDuration],\n    [0, 1],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n\n  const floatFactor = interpolate(\n    currentFrame,\n    [entranceEnd, entranceEnd + 15, exitStart - 10, exitStart],\n    [0, 1, 1, 0],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n\n  // 3D микропарение\n  const levitateY = Math.sin(currentFrame * 0.08) * 6 * floatFactor;\n  const tiltZ = Math.sin(currentFrame * 0.06) * 1.5 * floatFactor;\n  const tiltX = Math.cos(currentFrame * 0.07) * 2.5 * floatFactor;\n\n  // Расчет прохода светового блика (Shine Sweep)\n  const freq = Math.max(1, Number(sheenFrequency) || 3);\n  const cycleDuration = activeDuration / freq;\n  const localCycleFrame = currentFrame % cycleDuration;\n\n  // Длительность одного пролета блика\n  const sweepActiveDuration = Math.min(cycleDuration * 0.75, 45);\n  const sweepLinear = interpolate(\n    localCycleFrame,\n    [0, sweepActiveDuration],\n    [0, 1],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n  // Плавное ускорение и замедление луча (Bézier S-curve)\n  const sweepSmooth = Math.sin((sweepLinear - 0.5) * Math.PI) * 0.5 + 0.5;\n  const sweepOffsetPercent = interpolate(\n    sweepSmooth,\n    [0, 1],\n    [-130, 230],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n\n  // Опциональная иконка Lucide\n  const ResolvedIcon = iconName ? (LucideIcons as any)[iconName] : null;\n\n  const badgeSize = Number(size) || 320;\n  const borderRadius = Math.round(badgeSize * 0.26);\n  const badgeScale = entranceSpring * (1 - exitProgress * 0.3) * Number(scale || 1);\n  const badgeOpacity = Math.min(1, entranceSpring * 2.5) * (1 - exitProgress);\n\n  return (\n    <div className={`relative flex items-center justify-center select-none bg-transparent ${className}`}>\n      <div\n        className=\"relative flex items-center justify-center\"\n        style={{\n          perspective: '1000px',\n          transform: `translateY(${levitateY}px) scale(${badgeScale})`,\n          opacity: badgeOpacity,\n        }}\n      >\n        {/* Фоновый ореол свечения */}\n        <div\n          className=\"absolute pointer-events-none rounded-full transition-all\"\n          style={{\n            width: `${badgeSize + 120}px`,\n            height: `${badgeSize + 120}px`,\n            filter: 'blur(65px)',\n            opacity: (0.65 + Math.sin(currentFrame * 0.08) * 0.15) * (1 - exitProgress),\n            background: `radial-gradient(circle, ${glowColor} 0%, rgba(0, 0, 92, 0.4) 55%, transparent 75%)`,\n          }}\n        />\n\n        {/* Корпус бейджа с 3D-наклоном */}\n        <div\n          className=\"relative overflow-hidden border shadow-2xl flex items-center justify-center will-change-transform\"\n          style={{\n            width: `${badgeSize}px`,\n            height: `${badgeSize}px`,\n            borderRadius: `${borderRadius}px`,\n            background: `linear-gradient(145deg, ${badgeBgColor} 0%, ${badgeBgGradEnd} 100%)`,\n            borderColor: badgeBorderColor,\n            boxShadow: `0 24px 50px rgba(0, 0, 0, 0.65), inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 0 35px ${glowColor}40`,\n            transform: `rotateX(${tiltX}deg) rotateZ(${tiltZ}deg)`,\n            transformStyle: 'preserve-3d',\n          }}\n        >\n          {/* Внутренний глубокий градиент */}\n          <div className=\"absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/50 pointer-events-none\" />\n\n          {/* Контент: Текст / Иконка / Картинка */}\n          <div className=\"relative z-10 flex items-center justify-center select-none\">\n            {imageUrl ? (\n              <img\n                src={imageUrl}\n                alt=\"logo\"\n                className=\"w-3/4 h-3/4 object-contain pointer-events-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]\"\n              />\n            ) : ResolvedIcon ? (\n              <div style={{ color: logoColor }}>\n                <ResolvedIcon\n                  size={Math.round(badgeSize * 0.55)}\n                  strokeWidth={2.4}\n                  className=\"drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]\"\n                />\n              </div>\n            ) : (\n              <span\n                className=\"font-black tracking-tight drop-shadow-[0_6px_20px_rgba(0,0,0,0.7)]\"\n                style={{\n                  fontFamily: \"-apple-system, BlinkMacSystemFont, 'Montserrat', 'SF Pro Display', sans-serif\",\n                  fontSize: `${Math.round(badgeSize * 0.44)}px`,\n                  color: logoColor,\n                  lineHeight: 1,\n                }}\n              >\n                {logoText}\n              </span>\n            )}\n          </div>\n\n          {/* 1. ГЛАВНЫЙ СВЕТОВОЙ БЛИК (Premiere Pro Style CC Light Sweep) */}\n          <div\n            className=\"absolute inset-0 pointer-events-none z-20 overflow-hidden\"\n            style={{\n              borderRadius: `${borderRadius}px`,\n            }}\n          >\n            <div\n              className=\"absolute inset-y-[-50%] will-change-transform\"\n              style={{\n                width: `${sheenWidth}px`,\n                left: `${sweepOffsetPercent}%`,\n                transform: `rotate(${sheenAngle}deg)`,\n                background: `linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 20%, ${sheenColor} 50%, rgba(255, 255, 255, 0.15) 80%, transparent 100%)`,\n                filter: 'blur(4px)',\n                opacity: 0.95,\n                mixBlendMode: 'screen',\n              }}\n            />\n\n            {/* Вторичный мягкий рассеянный ореол блика (Feathered ambient sweep) */}\n            <div\n              className=\"absolute inset-y-[-50%] will-change-transform\"\n              style={{\n                width: `${sheenWidth * 2.2}px`,\n                left: `${sweepOffsetPercent - 15}%`,\n                transform: `rotate(${sheenAngle}deg)`,\n                background: `linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 30%, rgba(255, 255, 255, 0.35) 50%, rgba(255, 255, 255, 0.1) 70%, transparent 100%)`,\n                filter: 'blur(16px)',\n                opacity: 0.75,\n                mixBlendMode: 'screen',\n              }}\n            />\n          </div>\n\n          {/* Верхняя световая фаска бейджа */}\n          <div className=\"absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-white/80 to-transparent z-30 pointer-events-none\" />\n        </div>\n      </div>\n    </div>\n  );\n};"
+    },
+    {
+      "id": "LogoShineBadge9x16",
+      "name": "Premiere Style Logo Shine & Sheen (9:16 Shorts)",
+      "category": "social",
+      "description": "Крупная версия глянцевой иконки логотипа с бегущим световым бликом для Shorts/Reels/TikTok (9:16). Включает увеличенный масштаб бейджа, объемное свечение и настраиваемый Shine-эффект.",
+      "import_path": "../widgets",
+      "is_custom": true,
+      "props": [
+        {
+          "name": "logoText",
+          "type": "string",
+          "required": false,
+          "default": "Pr",
+          "description": "Текст или аббревиатура логотипа"
+        },
+        {
+          "name": "iconName",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Имя иконки из Lucide React (заменяет текст логотипа)"
+        },
+        {
+          "name": "imageUrl",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "URL собственного изображения логотипа"
+        },
+        {
+          "name": "badgeBgColor",
+          "type": "string",
+          "required": false,
+          "default": "#00005c",
+          "description": "Цвет фона иконки"
+        },
+        {
+          "name": "badgeBgGradEnd",
+          "type": "string",
+          "required": false,
+          "default": "#000028",
+          "description": "Конечный цвет фона иконки"
+        },
+        {
+          "name": "badgeBorderColor",
+          "type": "string",
+          "required": false,
+          "default": "#3b3bcf",
+          "description": "Цвет рамки и фаски бейджа"
+        },
+        {
+          "name": "logoColor",
+          "type": "string",
+          "required": false,
+          "default": "#9999ff",
+          "description": "Цвет логотипа или иконки"
+        },
+        {
+          "name": "sheenColor",
+          "type": "string",
+          "required": false,
+          "default": "#ffffff",
+          "description": "Цвет светового блика"
+        },
+        {
+          "name": "glowColor",
+          "type": "string",
+          "required": false,
+          "default": "#4b4bff",
+          "description": "Цвет фонового ореола свечения"
+        },
+        {
+          "name": "sheenAngle",
+          "type": "number",
+          "required": false,
+          "default": -25,
+          "description": "Угол наклона светового блика в градусах"
+        },
+        {
+          "name": "sheenWidth",
+          "type": "number",
+          "required": false,
+          "default": 140,
+          "description": "Ширина светового луча блика (в px)"
+        },
+        {
+          "name": "sheenFrequency",
+          "type": "number",
+          "required": false,
+          "default": 3,
+          "description": "Количество проходов блика за время ролика"
+        },
+        {
+          "name": "size",
+          "type": "number",
+          "required": false,
+          "default": 420,
+          "description": "Размер иконки для мобильного формата (в px)"
+        },
+        {
+          "name": "animation",
+          "type": "enum",
+          "required": false,
+          "default": "spring-pop",
+          "enum_values": ["spring-pop", "smooth-fade", "cyber-drop"],
+          "description": "Тип физической анимации появления"
+        },
+        {
+          "name": "durationFrames",
+          "type": "number",
+          "required": false,
+          "default": 300,
+          "description": "Общая длительность в кадрах (300 = 10 сек при 30 FPS)"
+        },
+        {
+          "name": "delayFrames",
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "description": "Задержка старта в кадрах"
+        },
+        {
+          "name": "scale",
+          "type": "number",
+          "required": false,
+          "default": 1.0,
+          "description": "Общий множитель масштаба"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Дополнительные Tailwind классы"
+        }
+      ],
+      "default_props": {
+        "logoText": "Pr",
+        "iconName": "",
+        "imageUrl": "",
+        "badgeBgColor": "#00005c",
+        "badgeBgGradEnd": "#000028",
+        "badgeBorderColor": "#3b3bcf",
+        "logoColor": "#9999ff",
+        "sheenColor": "#ffffff",
+        "glowColor": "#4b4bff",
+        "sheenAngle": -25,
+        "sheenWidth": 140,
+        "sheenFrequency": 3,
+        "size": 420,
+        "animation": "spring-pop",
+        "durationFrames": 300,
+        "delayFrames": 0,
+        "scale": 1.0,
+        "className": ""
+      },
+      "example_snippet": "<LogoShineBadge9x16 logoText=\"Pr\" badgeBgColor=\"#00005c\" logoColor=\"#9999ff\" size={420} durationFrames={300} />",
+      "tags": ["premiere-pro", "shine-effect", "light-sweep", "logo", "badge", "shorts", "reels", "tiktok", "9:16"],
+      "tsx_code": "import React from 'react';\nimport { interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';\nimport * as LucideIcons from 'lucide-react';\n\nexport interface LogoShineBadge9x16Props {\n  logoText?: string;\n  iconName?: string;\n  imageUrl?: string;\n  badgeBgColor?: string;\n  badgeBgGradEnd?: string;\n  badgeBorderColor?: string;\n  logoColor?: string;\n  sheenColor?: string;\n  glowColor?: string;\n  sheenAngle?: number;\n  sheenWidth?: number;\n  sheenFrequency?: number;\n  size?: number;\n  animation?: 'spring-pop' | 'smooth-fade' | 'cyber-drop';\n  durationFrames?: number;\n  delayFrames?: number;\n  scale?: number;\n  className?: string;\n}\n\nexport const LogoShineBadge9x16: React.FC<LogoShineBadge9x16Props> = ({\n  logoText = 'Pr',\n  iconName = '',\n  imageUrl = '',\n  badgeBgColor = '#00005c',\n  badgeBgGradEnd = '#000028',\n  badgeBorderColor = '#3b3bcf',\n  logoColor = '#9999ff',\n  sheenColor = '#ffffff',\n  glowColor = '#4b4bff',\n  sheenAngle = -25,\n  sheenWidth = 140,\n  sheenFrequency = 3,\n  size = 420,\n  animation = 'spring-pop',\n  durationFrames,\n  delayFrames = 0,\n  scale = 1.0,\n  className = '',\n}) => {\n  let frame = 0;\n  let fps = 30;\n  let compositionDuration = 300;\n\n  try {\n    const vConfig = useVideoConfig();\n    fps = vConfig.fps || 30;\n    compositionDuration = vConfig.durationInFrames || 300;\n  } catch (_) {}\n\n  try {\n    frame = useCurrentFrame();\n  } catch (_) {}\n\n  const totalDuration = Number(durationFrames) || compositionDuration;\n  const activeDuration = Math.max(1, totalDuration - Number(delayFrames || 0));\n  const currentFrame = Math.max(0, frame - Number(delayFrames || 0));\n\n  const entranceEnd = Math.min(28, Math.floor(activeDuration * 0.16));\n  const exitStart = Math.max(entranceEnd + 30, activeDuration - Math.min(32, Math.floor(activeDuration * 0.16)));\n\n  const entranceSpring = spring({\n    frame: currentFrame,\n    fps,\n    config: animation === 'cyber-drop'\n      ? { stiffness: 220, damping: 12, mass: 0.9 }\n      : { stiffness: 160, damping: 14, mass: 0.8 },\n  });\n\n  const exitProgress = interpolate(\n    currentFrame,\n    [exitStart, activeDuration],\n    [0, 1],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n\n  const floatFactor = interpolate(\n    currentFrame,\n    [entranceEnd, entranceEnd + 15, exitStart - 10, exitStart],\n    [0, 1, 1, 0],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n\n  const levitateY = Math.sin(currentFrame * 0.08) * 8 * floatFactor;\n  const tiltZ = Math.sin(currentFrame * 0.06) * 1.8 * floatFactor;\n  const tiltX = Math.cos(currentFrame * 0.07) * 3.0 * floatFactor;\n\n  const freq = Math.max(1, Number(sheenFrequency) || 3);\n  const cycleDuration = activeDuration / freq;\n  const localCycleFrame = currentFrame % cycleDuration;\n\n  const sweepActiveDuration = Math.min(cycleDuration * 0.75, 48);\n  const sweepLinear = interpolate(\n    localCycleFrame,\n    [0, sweepActiveDuration],\n    [0, 1],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n  const sweepSmooth = Math.sin((sweepLinear - 0.5) * Math.PI) * 0.5 + 0.5;\n  const sweepOffsetPercent = interpolate(\n    sweepSmooth,\n    [0, 1],\n    [-130, 230],\n    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }\n  );\n\n  const ResolvedIcon = iconName ? (LucideIcons as any)[iconName] : null;\n\n  const badgeSize = Number(size) || 420;\n  const borderRadius = Math.round(badgeSize * 0.26);\n  const badgeScale = entranceSpring * (1 - exitProgress * 0.3) * Number(scale || 1);\n  const badgeOpacity = Math.min(1, entranceSpring * 2.5) * (1 - exitProgress);\n\n  return (\n    <div className={`relative flex items-center justify-center select-none bg-transparent ${className}`}>\n      <div\n        className=\"relative flex items-center justify-center\"\n        style={{\n          perspective: '1000px',\n          transform: `translateY(${levitateY}px) scale(${badgeScale})`,\n          opacity: badgeOpacity,\n        }}\n      >\n        {/* Фоновое свечение */}\n        <div\n          className=\"absolute pointer-events-none rounded-full transition-all\"\n          style={{\n            width: `${badgeSize + 150}px`,\n            height: `${badgeSize + 150}px`,\n            filter: 'blur(75px)',\n            opacity: (0.7 + Math.sin(currentFrame * 0.08) * 0.15) * (1 - exitProgress),\n            background: `radial-gradient(circle, ${glowColor} 0%, rgba(0, 0, 92, 0.45) 55%, transparent 75%)`,\n          }}\n        />\n\n        {/* Корпус бейджа */}\n        <div\n          className=\"relative overflow-hidden border shadow-2xl flex items-center justify-center will-change-transform\"\n          style={{\n            width: `${badgeSize}px`,\n            height: `${badgeSize}px`,\n            borderRadius: `${borderRadius}px`,\n            background: `linear-gradient(145deg, ${badgeBgColor} 0%, ${badgeBgGradEnd} 100%)`,\n            borderColor: badgeBorderColor,\n            boxShadow: `0 28px 60px rgba(0, 0, 0, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.35), 0 0 45px ${glowColor}40`,\n            transform: `rotateX(${tiltX}deg) rotateZ(${tiltZ}deg)`,\n            transformStyle: 'preserve-3d',\n          }}\n        >\n          <div className=\"absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/50 pointer-events-none\" />\n\n          {/* Контент */}\n          <div className=\"relative z-10 flex items-center justify-center select-none\">\n            {imageUrl ? (\n              <img\n                src={imageUrl}\n                alt=\"logo\"\n                className=\"w-3/4 h-3/4 object-contain pointer-events-none drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]\"\n              />\n            ) : ResolvedIcon ? (\n              <div style={{ color: logoColor }}>\n                <ResolvedIcon\n                  size={Math.round(badgeSize * 0.55)}\n                  strokeWidth={2.4}\n                  className=\"drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]\"\n                />\n              </div>\n            ) : (\n              <span\n                className=\"font-black tracking-tight drop-shadow-[0_8px_24px_rgba(0,0,0,0.75)]\"\n                style={{\n                  fontFamily: \"-apple-system, BlinkMacSystemFont, 'Montserrat', 'SF Pro Display', sans-serif\",\n                  fontSize: `${Math.round(badgeSize * 0.44)}px`,\n                  color: logoColor,\n                  lineHeight: 1,\n                }}\n              >\n                {logoText}\n              </span>\n            )}\n          </div>\n\n          {/* СВЕТОВОЙ БЛИК */}\n          <div\n            className=\"absolute inset-0 pointer-events-none z-20 overflow-hidden\"\n            style={{\n              borderRadius: `${borderRadius}px`,\n            }}\n          >\n            <div\n              className=\"absolute inset-y-[-50%] will-change-transform\"\n              style={{\n                width: `${sheenWidth}px`,\n                left: `${sweepOffsetPercent}%`,\n                transform: `rotate(${sheenAngle}deg)`,\n                background: `linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 20%, ${sheenColor} 50%, rgba(255, 255, 255, 0.15) 80%, transparent 100%)`,\n                filter: 'blur(4px)',\n                opacity: 0.95,\n                mixBlendMode: 'screen',\n              }}\n            />\n\n            <div\n              className=\"absolute inset-y-[-50%] will-change-transform\"\n              style={{\n                width: `${sheenWidth * 2.2}px`,\n                left: `${sweepOffsetPercent - 15}%`,\n                transform: `rotate(${sheenAngle}deg)`,\n                background: `linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 30%, rgba(255, 255, 255, 0.35) 50%, rgba(255, 255, 255, 0.1) 70%, transparent 100%)`,\n                filter: 'blur(18px)',\n                opacity: 0.75,\n                mixBlendMode: 'screen',\n              }}\n            />\n          </div>\n\n          <div className=\"absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-white/80 to-transparent z-30 pointer-events-none\" />\n        </div>\n      </div>\n    </div>\n  );\n};"
+    }
+  ]
+}

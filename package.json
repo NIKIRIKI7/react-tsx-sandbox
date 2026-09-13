@@ -1,0 +1,77 @@
+{
+  "name": "browser-tsx-sandbox",
+  "version": "0.1.0",
+  "description": "Pure client-side TSX compiler and sandbox evaluator with dynamic NPM library loading.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "API.md"
+  ],
+  "keywords": [
+    "tsx",
+    "sandbox",
+    "sucrase",
+    "react",
+    "remotion",
+    "esm.sh",
+    "browser",
+    "compiler"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test",
+    "pack:check": "npm pack --dry-run",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "render": "node render/render.mjs",
+    "render:assets": "node render/render-assets.mjs",
+    "render:example": "node render/render-example.mjs",
+    "render:widgets": "node render/render-widgets.mjs",
+    "render:widgets:logo": "node render/render-widgets.mjs examples/vidora-widgets-logo.json",
+    "render:props": "node render/render-props.mjs",
+    "verify:video": "node render/verify-video.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "sucrase": "^3.35.0"
+  },
+  "peerDependencies": {
+    "react": ">=17"
+  },
+  "devDependencies": {
+    "@remotion/bundler": "^4.0.524",
+    "@remotion/renderer": "^4.0.524",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.0.1",
+    "@types/node": "^26.5.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "jsdom": "^25.0.1",
+    "lucide-react": "^1.45.0",
+    "postcss": "^8.5.28",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.524",
+    "tailwindcss": "^3.4.19",
+    "tsup": "^8.5.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
