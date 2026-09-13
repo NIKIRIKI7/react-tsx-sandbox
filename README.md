@@ -1,498 +1,76 @@
-Вот полная, подробная архитектурная документация (в формате `README.md`) для вашего проекта. Она полностью опирается на вашу Mermaid-диаграмму и детально описывает процесс динамической загрузки внешних библиотек из NPM прямо в браузере.
+<div align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="browser-tsx-sandbox — компиляция TSX и рендер Remotion-видео прямо в браузере">
+
+  <p>
+    <a href="https://www.npmjs.com/package/browser-tsx-sandbox"><img alt="npm" src="https://img.shields.io/npm/v/browser-tsx-sandbox?color=4FDBC8&label=npm"></a>
+    <img alt="types included" src="https://img.shields.io/badge/types-included-67E8F9">
+    <img alt="Remotion" src="https://img.shields.io/badge/Remotion-%E2%89%A54-C4A8FF">
+    <img alt="100% client-side" src="https://img.shields.io/badge/100%25-client--side-4FDBC8">
+    <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-8FA2C2">
+  </p>
+
+  <p><b>Компилирует TSX и рендерит Remotion-видео прямо в браузере.</b><br>
+  Без сервера и без сборки бандла: npm-зависимости тянутся с <code>esm.sh</code>, ассеты — через <code>blob:</code>, предпросмотр — в официальном <code>@remotion/player</code>.</p>
+</div>
 
 ---
 
-# 📦 browser-tsx-sandbox (Pro Edition)
+## Зачем это
 
-**Полностью автономная In-Browser среда (Pure Client-Side App) для компиляции TSX, рендеринга видео через Remotion и динамической загрузки NPM-зависимостей.**
+Вы пишете или генерируете **TSX** (в редакторе, от ИИ, из JSON-каталога) — и получаете работающий React-компонент и настоящий видеопредпросмотр **прямо на клиенте**. Это ядро для браузерных видеоредакторов, AI-видеогенераторов и playground'ов, которым нельзя позволить себе серверный бандлинг.
 
-Эта архитектура позволяет создавать видеоредакторы и AI-генераторы видео, работающие на 100% в браузере пользователя, без использования Node.js бэкенда для сборки бандлов. 
-
-## ✨ Ключевые возможности
-
-- 🚀 **Zero-Backend:** Вся работа с файлами, компиляция кода и рендеринг происходят на клиенте.
-- 📦 **Нативная поддержка NPM:** Динамический импорт любых библиотек (например, `framer-motion`, `d3`, `three.js`) напрямую с CDN (esm.sh / jsdelivr).
-- 🎨 **Remotion + Tailwind:** Мгновенный рендеринг видеокадров и генерация служебных CSS-классов на лету (Tailwind JIT).
-- 🧩 **Локальные ассеты:** Поддержка Drag & Drop медиафайлов через `Blob API` и `URL.createObjectURL` без загрузки на сервер.
-- 🛡️ **Изоляция и Безопасность:** Безопасное выполнение сгенерированного ИИ кода (Shadowing глобальных переменных).
-- 🪄 **Интеграция Lucide Icons:** Встроенный адаптер для поиска и рендеринга иконок без загрузки всей библиотеки целиком.
-- 🧱 **Готовый UI-компонент:** `<Sandbox config={{ code, assets, modules, ... }} />` — импортируется и кастомизируется слотами (`render`, `renderLoading`, `renderError`, `wrapper`, `className`, `style`).
-- ▶️ **Живой предпросмотр:** `<PlayerSandbox />` (subpath `browser-tsx-sandbox/player`) показывает результат в `@remotion/player` с play/pause/seek — без серверного рендера.
-- 🎵 **Аудио-движок:** нативная поддержка фоновой музыки и озвучки (`<Audio />`) с плавным управлением громкостью (Audio Ducking) прямо на таймлайне.
-- ⏱ **Data-Driven Timeline:** слои музыки, SFX, субтитров и стикеров описываются JSON-массивом `Cue` (`MusicLayer` / `SFXLayer` / `TrackLayer`, `useActiveCues`) и обновляются без перекомпиляции TSX.
-- 🎨 **Headless Player UI:** полный контроль над дизайном плеера через паттерн *Render Props* (`PlayButton`, `Timeline`, `TimeDisplay`, `VolumeControl`) — свои кнопки, слайдеры и тулбары.
+- 🚀 **Zero-Backend** — компиляция, загрузка библиотек и рендер происходят в браузере.
+- 📦 **NPM из коробки** — `import { motion } from 'framer-motion'` подгружается с CDN на лету.
+- ▶️ **Живой Player** — одиночный вызов, полный Remotion-контекст (`useCurrentFrame`, `<Sequence>`).
+- ⏱ **Data-Driven Timeline** — музыка, озвучка, SFX, субтитры и стикеры описываются JSON-массивом `Cue`.
+- 🎨 **Headless UI** — примитивы плеера отдают состояние через *Render Props*: свой дизайн на Tailwind/Radix/MUI.
+- 🧩 **Ассеты без сервера** — Drag & Drop медиа → `blob:` → `staticFile()`.
+- 🛡️ **Устойчивость** — защита от бесконечных циклов, watchdog `delayRender`, ErrorBoundary, WebGL-guard.
 
 ---
 
-## 🚀 Быстрый старт (разработка)
+## Реальный выхлоп
 
-Это **библиотечный пакет**, а не готовое приложение, поэтому у него нет `dev`-сервера — разработка идёт через тесты и проверку типов.
+Кадры, отрендеренные пакетом в headless Chrome (скрипты `render:timeline`, `render:voiceover`, `render:animation`):
 
-### 1. Требования
-- Node.js 18+ (проект проверен на Node 24)
-- npm
+<p align="center">
+  <img src="./assets/readme/proof-timeline.png" width="32%" alt="Data-Driven Timeline: музыка, озвучка, SFX и стикеры из массива Cue">
+  <img src="./assets/readme/proof-voiceover.png" width="32%" alt="Анимация с реальной озвучкой, музыкой с ducking и звуковыми эффектами">
+  <img src="./assets/readme/proof-motion.png" width="32%" alt="Ритм-анимация: музыка приглушается на удары, SFX играют по таймкоду">
+</p>
 
-### 2. Установка зависимостей
-```bash
-npm install
-```
+Всё это — результат работы пайплайна песочницы, а не мокапы: `SandboxFacade` компилирует TSX, `executeComponent` выполняет его, а Remotion рендерит H.264 + AAC.
 
-### 3. Команды
+---
 
-| Команда | Что делает |
-|---|---|
-| `npm test` | один прогон всех тестов (Vitest) |
-| `npm run test:watch` | тесты в режиме наблюдения (watch) |
-| `npm run test:e2e` | e2e-тест реального рендера видео (Remotion + Chrome) |
-| `npm run test:network` | сетевые тесты: реальная загрузка библиотек с esm.sh |
-| `npm run render` | вручную отрендерить PNG-кадр и MP4 из сцены песочницы |
-| `npm run render:assets` | то же, но с медиа-ассетами, распакованными из ZIP |
-| `npm run render:example` | рендер реальной анимации из `examples/remotion-scene.tsx` |
-| `npm run render:widgets` | рендер виджетов из JSON-каталога `examples/vidora-widgets.json` |
-| `npm run render:widgets:logo` | рендер каталога `examples/vidora-widgets-logo.json` |
-| `npm run render:props` | рендер вариаций пропсов (проверка, что параметры меняют результат) |
-| `npm run render:cdn` | рендер сцены с библиотеками, скачанными с esm.sh в браузере |
-| `npm run render:showcase` | сводный рендер: Tailwind + lucide + d3/three в одной сцене |
-| `npm run render:audio` | рендер аудиосцены (музыка + озвучка + Audio Ducking) в MP4 с дорожкой AAC |
-| `npm run render:animation` | рендер анимации со скачанными музыкой и SFX (`sound-motion.mp4`, H.264 + AAC) |
-| `npm run render:timeline` | рендер Data-Driven таймлайна (музыка + озвучка + SFX + стикеры из JSON) |
-| `npm run render:voiceover` | рендер анимации с реальной озвучкой (`examples/voice/voice_01.wav`) + музыкой + SFX |
-| `npm run demo` | открыть demo-страницу с живым `<PlayerSandbox />` (Vite) |
-| `npm run demo:build` | собрать статику demo-страницы в `demo/dist` |
-| `npm run build` | сборка npm-пакета (`tsup` → `dist/`: ESM + CJS + типы) |
-| `npm run pack:check` | `npm pack --dry-run` — показать содержимое тарбола |
-| `npm run verify:video` | проверить выданный MP4 (контейнер, кодек, размеры, длительность) |
-| `npm run typecheck` | статическая проверка типов (`tsc --noEmit`) |
-
-### 4. Ручная проверка пайплайна
-
-Песочницу можно прогнать на реальном файле `examples/remotion-scene.tsx`. Он компилируется из TSX в CommonJS, зависимости (`react`, `remotion`, `lucide-react`) подставляются заглушками, после чего сцена выполняется как React-компонент. Именно это проверяет интеграционный тест `src/facade.remotion.test.ts`:
+## Быстрый старт
 
 ```bash
-npx vitest run src/facade.remotion.test.ts
+npm install browser-tsx-sandbox react remotion @remotion/player
 ```
 
-### 5. Реальный рендер видео (Remotion)
-
-Папка `render/` содержит настоящий e2e-пайплайн: сцена на TSX компилируется и выполняется через `SandboxFacade`, регистрируется как Remotion-композиция и рендерится в **PNG-кадр и MP4** через headless Chrome.
-
-```bash
-npm run render       # -> render/out/frame-30.png и render/out/sandbox.mp4
-npm run test:e2e     # то же самое, но с проверками (размеры, наличие файлов)
-```
-
-Требуется установленный Google Chrome (или Edge). Путь ищется автоматически; при необходимости задайте свой:
-
-```bash
-$env:REMOTION_BROWSER="C:\путь\к\chrome.exe"; npm run render
-```
-
-> E2E-тест намеренно не входит в `npm test`: он бандлит Remotion-проект и запускает браузер, поэтому выполняется отдельно (~1 мин).
-
-### 6. Ассеты из ZIP
-
-Медиа-ресурсы (видео, картинки, шрифты, JSON) можно передать одним архивом. Библиотечная часть — `src/assets/zip.ts`: `extractAssetZip` распаковывает `Uint8Array` в карту байтов, `createAssetUrlMap` превращает её в `filename -> blob:url` для `SandboxFacade.setAssets`.
-
-```ts
-import { extractAssetZip, createAssetUrlMap, releaseAssetUrls } from 'browser-tsx-sandbox';
-
-const archive = extractAssetZip(zipBytes); // { 'assets/clip.mp4': Uint8Array, ... }
-const urls = createAssetUrlMap(archive, (bytes) => URL.createObjectURL(new Blob([bytes])));
-facade.setAssets(urls); // теперь staticFile('clip.mp4') отдаёт blob:-ссылку
-// ...
-releaseAssetUrls(urls, URL.revokeObjectURL);
-```
-
-E2E-тест `render/assets.e2e.test.ts` кладёт реальный MP4 и SVG в ZIP, распаковывает их в `public` и рендерит сцену с `OffthreadVideo` + `Img` через Remotion `staticFile`:
-
-```bash
-npm run render:assets   # -> render/out/asset-still.png, render/out/asset-video.mp4
-npm run test:e2e        # оба e2e-сценария (без ассетов и с ассетами)
-```
-
-### 7. Рендер анимации из `examples/`
-
-`npm run render:example` берёт настоящий `examples/remotion-scene.tsx` (1177 кадров, 1920×1080) и проводит его через полный пайплайн:
-
-1. находит в TSX абсолютные пути к видео и заменяет их на раздаваемые через `staticFile` (роль `ImportResolver`), копируя ролики в `public/b-roll/`;
-2. компилирует Tailwind-утилиты из исходника на этапе сборки и инжектит их в сцену;
-3. компилирует и выполняет сцену песочницей с реальными `react`, `remotion`, `lucide-react`;
-4. рендерит по одному ключевому кадру каждого фрагмента и короткий клип.
-
-```bash
-npm run render:example
-# -> render/out/example-frame-0075.png ... example-frame-1080.png
-# -> render/out/example-map.mp4
-```
-
-E2E-тест: `render/example.e2e.test.ts`.
-
-### 8. Виджеты из JSON-каталога
-
-`examples/vidora-widgets.json` — экспорт каталога виджетов (`Vidora Motion Studio`): метаданные, `default_props` и встроенный `tsx_code`. `npm run render:widgets` парсит JSON и прогоняет **каждый** `tsx_code` через песочницу:
-
-1. Tailwind-утилиты компилируются из `tsx_code` всех виджетов;
-2. в Remotion-проекте каждый виджет компилируется (`compileTsx`), выполняется (`executeComponent`) и регистрируется как отдельная `Composition` с `default_props` (16:9 → 1920×1080, 9:16 → 1080×1920);
-3. рендерятся ключевые кадры каждого виджета и короткий клип.
-
-```bash
-npm run render:widgets
-# -> render/out/widget-WordByWordText16x9-*.png
-# -> render/out/widget-WordByWordText9x16-*.png
-# -> render/out/widget-WordByWordText16x9.mp4
-```
-
-E2E-тест: `render/widgets.e2e.test.ts`.
-
-Второй каталог — `examples/vidora-widgets-logo.json` (Logo Shine Badge). Пропсы влияют на рендер, а `imageUrl` разбирается и встраивается как изображение. Проверяется тестом `render/props.e2e.test.ts`:
-
-```bash
-npm run render:widgets:logo   # дефолтные пропсы
-npm run render:props          # вариации: текст/размер/цвет/иконка/картинка
-```
-
-> Полное описание всех контрактов и сигнатур — в [`API.md`](./API.md).
-
-### 9. Пример использования на стороне потребителя
-
-**Самый простой способ — готовый UI-компонент.** Один импорт, вся конфигурация в объекте-пропсе:
+**Готовый UI-компонент** — один проп-объект:
 
 ```tsx
 import { Sandbox } from 'browser-tsx-sandbox';
 
-function Preview({ userTsx, blobAssets }: { userTsx: string; blobAssets: Record<string, string> }) {
-  return (
-    <Sandbox
-      config={{
-        code: userTsx,
-        assets: blobAssets,                 // staticFile('logo.png') -> blob:...
-        className: 'rounded-lg overflow-hidden',
-        style: { height: 480 },
-        renderLoading: () => <Spinner />,
-        renderError: ({ error }) => <Banner text={error.message} />,
-        onCompiled: ({ executionTimeMs }) => console.log(`compiled in ${executionTimeMs}ms`),
-      }}
-    />
-  );
-}
+const code = `
+  export default function Scene() {
+    return <div style={{ color: '#4FDBC8', fontSize: 72 }}>Hello sandbox</div>;
+  }
+`;
+
+<Sandbox config={{ code, className: 'rounded-xl overflow-hidden' }} />
 ```
 
-`config` принимает:
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `code` | `string` | TSX для компиляции и рендера (обязательно) |
-| `modules` | `ModuleRegistry` | Доступные модули (`react` добавляется автоматически) |
-| `assets` | `Record<string, string>` | Карта ассетов для `staticFile(...)` (`blob:`/`data:`/`http`) |
-| `importer` | `ModuleImporter` | Свой загрузчик npm-пакетов (по умолчанию esm.sh) |
-| `className`, `style` | `string`, `CSSProperties` | Контейнер (включается, если заданы) |
-| `wrapper` | `ComponentType<{children}>` | Обёртка вокруг готового компонента |
-| `render` | `(ctx) => ReactNode` | Полный контроль над рендером |
-| `renderLoading`, `renderError` | `(ctx) => ReactNode` | Кастомные состояния |
-| `onCompiled`, `onError` | колбэки | Уведомления о результате |
-
-**Низкоуровневые API** для полного контроля:
-
-```tsx
-import { useLiveSandbox, SandboxFacade } from 'browser-tsx-sandbox';
-import * as React from 'react';
-
-// 1) Хук
-const { Component, error, isCompiling } = useLiveSandbox(code, {}, assets, {
-  importer,
-  onCompiled,
-  onError,
-});
-
-// 2) Фасад (императивно)
-const facade = new SandboxFacade({ react: React }, importer);
-facade.setAssets(assets);
-const { component: Compiled, error: compileError } = await facade.compile(code);
-```
-
----
-
-## 🏗 Архитектура системы
-
-Ниже представлена полная схема взаимодействия подсистем (UI, State, Sandbox, Library Manager и Rendering Engine).
-
-```mermaid
-graph LR
-    classDef ui fill:#2b6cb0,stroke:#3182ce,stroke-width:2px,color:#fff;
-    classDef state fill:#38a169,stroke:#48bb78,stroke-width:2px,color:#fff;
-    classDef core fill:#805ad5,stroke:#9f7aea,stroke-width:2px,color:#fff;
-    classDef frontend fill:#dd6b20,stroke:#c05621,stroke-width:2px,color:#fff;
-    classDef api fill:#319795,stroke:#4fd1c5,stroke-width:2px,color:#fff;
-    classDef lib fill:#d69e2e,stroke:#ecc94b,stroke-width:2px,color:#fff;
-    classDef error fill:#e53e3e,stroke:#f56565,stroke-width:2px,color:#fff;
-
-    subgraph Browser ["Вкладка браузера (Pure Client-Side App)"]
-
-        subgraph UI ["UI Layer"]
-            CodeEditor["CodeEditor <br/> Monaco/CodeMirror"]:::ui
-            PromptPanel["AI Prompt Panel <br/> generate/fix component"]:::ui
-            SettingsEditor["Settings Editor <br/> fps, duration, theme"]:::ui
-            AssetPanel["Asset Manager <br/> drag and drop, list, preview"]:::ui
-            LibraryManager["Library Manager <br/> add/remove libraries"]:::ui
-            IconPicker["Lucide Icon Picker <br/> search and insert icon"]:::ui
-            StatusBar["Status Bar <br/> compiling, ready, error"]:::ui
-        end
-
-        subgraph State ["Application State"]
-            ProjectStore["ProjectStore <br/> files, activeFile, code"]:::state
-            SettingsStore["SettingsStore <br/> fps, duration, theme, props"]:::state
-            AssetStore["AssetStore <br/> blobUrl, mime, size, map"]:::state
-            LibraryStore["LibraryStore <br/> installed libs, versions, enabled"]:::state
-            LucideCatalog["LucideCatalog <br/> icon names, tags"]:::state
-            SandboxState["SandboxState <br/> compile status, error"]:::state
-        end
-
-        subgraph Sandbox ["browser-tsx-sandbox"]
-            SandboxFacade["SandboxFacade <br/> orchestrate compile and evaluate"]:::core
-            ImportResolver["ImportResolver <br/> resolve local files, assets, bare imports"]:::core
-            SyntaxChecker["SyntaxChecker <br/> parse TSX AST"]:::core
-            Compiler["SucraseCompiler <br/> TSX to CommonJS"]:::core
-            ModuleCache["ModuleCache <br/> compiled module registry"]:::core
-            DependencyContainer["DependencyContainer <br/> React, Remotion, helpers"]:::core
-            ScopeFactory["ScopeFactory <br/> DI, allowed globals, shadowing"]:::core
-            RuntimeEvaluator["RuntimeEvaluator <br/> new Function execution"]:::core
-            ErrorMapper["ErrorMapper <br/> map errors to editor position"]:::error
-        end
-
-        subgraph LibSystem ["Library Runtime"]
-            LibraryResolver["LibraryResolver <br/> resolve bare imports"]:::lib
-            LibraryLoader["LibraryLoader <br/> CDN, local file, blob"]:::lib
-            ModuleFormatAdapter["ModuleFormatAdapter <br/> ESM/CJS/global normalize"]:::lib
-            LibraryStyleLoader["LibraryStyleLoader <br/> css from libraries"]:::lib
-            LibraryRegistry["LibraryRegistry <br/> registered runtime modules"]:::lib
-            LucideAdapter["LucideAdapter <br/> lucide-react icon factory"]:::lib
-            LucideIconMap["LucideIconMap <br/> icon name to component"]:::lib
-        end
-
-        subgraph Render ["Rendering Engine"]
-            Player["Remotion Player"]:::frontend
-            CompositionRoot["CompositionRoot <br/> Composition and Root"]:::frontend
-            SceneComponent["SceneComponent <br/> user component instance"]:::frontend
-            Timeline["TimelineController <br/> play, seek, frame"]:::frontend
-            RemotionHooks["Remotion Hooks <br/> useCurrentFrame, useVideoConfig"]:::frontend
-            TailwindRuntime["Tailwind Runtime <br/> generate utility CSS"]:::frontend
-            StyleCache["StyleCache <br/> css text, invalidation"]:::frontend
-        end
-
-        subgraph BrowserAPIs ["Browser APIs"]
-            FileAPI["File/Blob API"]:::api
-            ObjectURL["URL.createObjectURL"]:::api
-            RAF["requestAnimationFrame"]:::api
-            Storage["localStorage/IndexedDB <br/> optional persistence"]:::api
-            Network["fetch and CDN <br/> esm.sh, jsdelivr"]:::api
-        end
-
-    end
-
-    CodeEditor -->|code change| ProjectStore
-    PromptPanel -->|generated TSX| ProjectStore
-    SettingsEditor -->|settings change| SettingsStore
-
-    AssetPanel -->|selected files| FileAPI
-    FileAPI -->|read as Blob| ObjectURL
-    ObjectURL -->|blob URL| AssetStore
-    AssetPanel -->|delete or rename| AssetStore
-
-    LibraryManager -->|add or remove| LibraryStore
-    LibraryManager -->|install request| LibraryLoader
-    IconPicker -->|search icons| LucideCatalog
-    IconPicker -->|insert import and use| CodeEditor
-
-    ProjectStore -->|raw TSX| SandboxFacade
-    SettingsStore -->|player props| CompositionRoot
-    AssetStore -->|asset map| ImportResolver
-    LibraryStore -->|enabled libraries| LibraryResolver
-    LucideCatalog --> LucideIconMap
-
-    SandboxFacade -->|step 1 resolve| ImportResolver
-
-    ImportResolver -->|bare import request| LibraryResolver
-    LibraryResolver -->|lookup| LibraryRegistry
-    LibraryResolver -->|resolved library module| ImportResolver
-
-    ImportResolver -->|resolved source| SyntaxChecker
-    SyntaxChecker -->|step 2 parse| Compiler
-    Compiler -->|CommonJS module| ModuleCache
-    ModuleCache -->|cached module| ScopeFactory
-
-    LibraryLoader -->|fetch package| Network
-    Network -->|module payload| LibraryLoader
-    LibraryLoader --> ModuleFormatAdapter
-    ModuleFormatAdapter --> LibraryRegistry
-
-    LibraryLoader -->|library css| LibraryStyleLoader
-    LibraryStyleLoader -->|inject styles| StyleCache
-
-    DependencyContainer -->|React runtime| LucideAdapter
-    LucideAdapter --> LucideIconMap
-    LucideIconMap --> LibraryRegistry
-    LibraryRegistry -->|library modules| DependencyContainer
-
-    DependencyContainer -->|allowed deps| ScopeFactory
-    ScopeFactory -->|isolated scope| RuntimeEvaluator
-    RuntimeEvaluator -->|React component| SceneComponent
-
-    SyntaxChecker -.->|syntax error| ErrorMapper
-    Compiler -.->|transform error| ErrorMapper
-    RuntimeEvaluator -.->|runtime error| ErrorMapper
-    LibraryLoader -.->|load error| ErrorMapper
-    ErrorMapper -->|friendly error| SandboxState
-    SandboxState -->|show status| StatusBar
-
-    SceneComponent -->|render tree| CompositionRoot
-    CompositionRoot -->|mounted composition| Player
-    Timeline -->|current frame| Player
-    Player -->|frame render| SceneComponent
-    RemotionHooks -->|frame and config| SceneComponent
-
-    SceneComponent -->|class names| TailwindRuntime
-    TailwindRuntime -->|generated CSS| StyleCache
-    StyleCache -->|inject styles| Player
-
-    Player -->|animation loop| RAF
-
-    ProjectStore -.->|autosave| Storage
-    SettingsStore -.->|autosave| Storage
-    AssetStore -.->|metadata save| Storage
-    LibraryStore -.->|installed libs save| Storage
-```
-
----
-
-## 📦 Поддержка внешних NPM библиотек (Library Runtime)
-
-Одной из главных фич платформы является способность "на лету" разрешать сторонние зависимости прямо в браузере, так же, как это делают CodeSandbox или StackBlitz.
-
-### Как это работает:
-1. **Перехват импортов (ImportResolver):** 
-   Когда пользователь или ИИ пишет: `import { motion } from "framer-motion"`, `ImportResolver` понимает, что это *bare import* (запрос внешнего пакета, а не локального файла).
-2. **Загрузка через CDN (LibraryLoader):** 
-   Запрос отправляется на CDN-провайдер (например, `https://esm.sh/framer-motion`), который возвращает пакет, собранный для браузера (ESM формат).
-3. **Адаптация модулей (ModuleFormatAdapter):** 
-   Так как наш `Compiler` (Sucrase) превращает TSX в CommonJS (используя `require`), адаптер конвертирует полученный с CDN ESM-модуль так, чтобы он был доступен через `DependencyContainer`.
-4. **Кэширование (LibraryRegistry):** 
-   Скачанный модуль сохраняется в реестре. При следующем рендере сеть не используется.
-5. **Подгрузка CSS (LibraryStyleLoader):** 
-   Если библиотека поставляется с CSS (например, `import "swiper/css"`), лоадер скачивает стили и инжектит их в `StyleCache`, чтобы они сразу применились к видео.
-
-### Особенность: Lucide Icons
-Для работы с иконками `lucide-react` реализован отдельный микро-пайплайн. Вместо загрузки всей тяжелой библиотеки, `LucideAdapter` динамически мапит имена иконок (из `LucideCatalog`) и создает компоненты иконок "по требованию".
-
----
-
-## ⚙️ Детальное описание подсистем
-
-### 1. UI Layer & State (Пользовательский интерфейс)
-Интерфейс строится на React и менеджере состояний (Zustand/Redux).
-- **CodeEditor:** Текстовый редактор (Monaco) для ручного написания кода.
-- **AssetPanel:** Загрузка медиа (Drag & drop). Файлы не улетают на сервер. Браузерный `URL.createObjectURL()` мгновенно превращает локальный MP4/PNG в ссылку (`blob:http://...`), которая сохраняется в `AssetStore`.
-- **Auto-Save:** Все состояния (`ProjectStore`, `SettingsStore`, `AssetStore`) автоматически сохраняются в `localStorage` или `IndexedDB`.
-
-### 2. Sandbox Engine (Ядро компиляции)
-Оркестратор, превращающий строку текста в работающий React-компонент.
-- **SyntaxChecker:** Предварительная проверка AST дерева. Если есть ошибка, `ErrorMapper` переводит ее в понятный вид и показывает в редакторе (подчеркивает красным).
-- **SucraseCompiler:** Самый быстрый транспилятор TSX -> JS. Вырезает типы TypeScript и превращает JSX в `React.createElement`.
-- **ScopeFactory & RuntimeEvaluator:** Безопасное выполнение скомпилированного JS-кода через `new Function()`. `ScopeFactory` осуществляет "затенение" (Shadowing) глобальных объектов (`window`, `document`), предотвращая XSS и доступ к глобальному API браузера.
-
-### 3. Rendering Engine (Рендеринг видео)
-- **Remotion Player:** Сердце видеоплеера. Принимает смонтированную композицию (`CompositionRoot`) и управляет таймлайном через `requestAnimationFrame`.
-- **Tailwind Runtime:** Сканирует отрендеренный `SceneComponent` на наличие утилитарных классов (например, `className="bg-red-500 flex"`). Генерирует CSS правила "на лету" и отправляет их в `StyleCache`, который инжектит их в DOM плеера.
-
----
-
-## 🔄 Жизненный цикл (Data Flow)
-
-Что происходит, когда ИИ генерирует новый TSX или пользователь нажимает клавишу в редакторе:
-
-1. Строка кода обновляется в `ProjectStore`.
-2. `SandboxFacade` инициирует сборку.
-3. `ImportResolver` сканирует все `import ... from ...` в коде.
-    - Локальные ассеты заменяются на `blob:` ссылки из `AssetStore`.
-    - Неизвестные NPM библиотеки отправляются в `LibraryLoader` -> скачиваются с `esm.sh` -> попадают в `LibraryRegistry`.
-4. Код парсится (`SyntaxChecker`) и компилируется (`Compiler`).
-5. `DependencyContainer` собирает `require`-объекты (React, Remotion, скачанные NPM-либы).
-6. `RuntimeEvaluator` выполняет изолированный JS-код, возвращая функцию React-компонента.
-7. Компонент монтируется в `SceneComponent`.
-8. `Tailwind Runtime` перехватывает классы и генерирует CSS.
-9. `Remotion Player` отображает кадр.
-
----
-
-## 🛠 Установка и использование (Псевдокод внедрения)
-
-```bash
-npm install browser-tsx-sandbox remotion @twind/core
-```
-
-**Пример использования SandboxFacade:**
-
-```tsx
-import { SandboxFacade } from 'browser-tsx-sandbox';
-import { useProjectStore, useAssetStore, useLibraryStore } from './store';
-
-function PreviewPipeline() {
-  const code = useProjectStore(state => state.code);
-  const blobAssets = useAssetStore(state => state.map); // { "logo.png": "blob:..." }
-  
-  const { Component, error } = useAsyncMemo(async () => {
-    const facade = new SandboxFacade();
-    
-    // 1. Конфигурируем зависимости и ресурсы
-    facade.setAssets(blobAssets);
-    
-    // 2. Песочница сама скачает недостающие библиотеки из импортов (NPM)
-    return await facade.compileAndEvaluate(code);
-  }, [code, blobAssets]);
-
-  if (error) return <ErrorOverlay error={error} />;
-  
-  return <RemotionPlayer component={Component} {...playerSettings} />;
-}
-```
----
-
-## 🌐 Живая загрузка библиотек с CDN
-
-Ключевая фича: если TSX импортирует пакет, которого нет в реестре, `SandboxFacade` скачивает его с `esm.sh` и подключает как `require`, без сборки бандла на сервере.
-
-- **Браузер:** дефолтный загрузчик делает нативный `import('https://esm.sh/<pkg>')`. Библиотека и её зависимости — ESM; для React-библиотек (например, `framer-motion`) `esm.sh` оставляет `react` внешним.
-- **Node:** нативные `https`-импорты не поддерживаются, поэтому в тестах используется адаптер: качает `?bundle` (самодостаточный ESM) и импортирует из временного файла.
-
-Проверки:
-
-```bash
-npm run test:network   # Node: d3, three, canvas-confetti — реально скачаны и выполнены
-npm run render:cdn     # Chrome: d3 и three импортированы с esm.sh во время рендера кадра
-```
-
-Результат `render:cdn`: `cdn-libs.png` (17 КБ) и `cdn-libs.mp4` — валидный H.264 `640×360`, 60 кадров, `2.0s`, `valid: true`.
-
-Сводный пример — `npm run render:showcase` (сцена `render/showcase-scene.tsx`): за одну анимацию используются **Tailwind** (утилиты компилируются и инжектятся), **lucide-react** (реальные иконки) и **d3 + three** (скачиваются с esm.sh во время рендера). Результат: `showcase-frame-*.png` и `showcase.mp4` — H.264 `1280×720`, 120 кадров, `4.0s`, `valid: true`. Тест `render/showcase.e2e.test.ts` дополнительно проверяет, что Tailwind-утилиты (`.flex`, `.grid-cols-4`, `.rounded-2xl`, `.shadow-2xl`, `.bg-slate-950`) реально попали в CSS.
-
-> `framer-motion` скачивается (shim + bundle), но для рендера ему нужен общий с React-инстанс — в браузере это решается import-map/алиасингом (`?external=react`).
-
----
-
-## ▶️ Живой предпросмотр (Remotion Player)
-
-`<PlayerSandbox />` компилирует TSX и **сразу** показывает его в официальном `@remotion/player` — с play/pause/seek, без серверного рендера. Это отдельный subpath, поэтому `@remotion/player` не тянется в основной бандл.
-
-```bash
-npm install browser-tsx-sandbox react @remotion/player
-```
+**Живой видеоплеер** (subpath `browser-tsx-sandbox/player`):
 
 ```tsx
 import { PlayerSandbox } from 'browser-tsx-sandbox/player';
 
 <PlayerSandbox
   config={{
-    code: userTsx,
-    assets: blobAssets,          // staticFile('clip.mp4') -> blob:...
+    code,
     durationInFrames: 300,
     fps: 30,
     width: 1920,
@@ -501,45 +79,89 @@ import { PlayerSandbox } from 'browser-tsx-sandbox/player';
     loop: true,
     renderLoading: () => <Spinner />,
     renderError: ({ error }) => <Banner text={error.message} />,
-    onCompiled: ({ executionTimeMs }) => console.log(executionTimeMs),
+    onCompiled: ({ executionTimeMs }) => console.log(`compiled in ${executionTimeMs}ms`),
   }}
 />
 ```
 
-`config` = `SandboxConfig` + параметры плеера: `durationInFrames`, `fps`, `width`, `height`, `controls`, `loop`, `autoPlay`, `inputProps`, плюс `playerProps` (escape hatch для любых пропсов `<Player />`).
+---
 
-Внутри Player работает полноценный Remotion-контекст: `useCurrentFrame()` / `useVideoConfig()` дают реальный кадр таймлайна (в отличие от голого `<Sandbox />`, где хуки вне композиции бросают исключение и виден статичный кадр 0).
+## ⏱ Data-Driven Timeline
 
-> **Рендер в файл** (`renderStill`/`renderMedia`) — по-прежнему офлайн в Node + Chrome; «смотреть прямо во время записи файла» нельзя, но Player даёт мгновенный предпросмотр рядом.
+<img src="./assets/readme/timeline.svg" width="100%" alt="Массив cues превращается в дорожки музыки, озвучки, SFX и стикеров; громкость музыки приглушается под озвучку">
 
-Тест: `src/react/PlayerSandbox.test.tsx` (реальный `@remotion/player` в jsdom, включая `useCurrentFrame`).
-
-### 🎨 Headless UI: свой дизайн плеера (Render Props)
-
-Интерфейс плеера **максимально кастомизируем**. `PlayerSandbox.Root` — это headless-контейнер: он даёт доступ к состоянию через `PlayerContext`, а вложенные примитивы умеют отдавать управление вашему UI через render props. Можно собрать тулбар, неотличимый от CapCut/Premiere, на Tailwind, Radix UI, MUI — чем угодно.
-
-| Примитив | API | Контекст render prop |
-|---|---|---|
-| `PlayerSandbox.PlayButton` | `children` как функция | `{ isPlaying, toggle }` |
-| `PlayerSandbox.TimeDisplay` | `render` | `{ frame, totalFrames, time, totalTime, fps }` |
-| `PlayerSandbox.Timeline` | `render` | `{ currentFrame, durationInFrames, seekTo }` |
-| `PlayerSandbox.VolumeControl` | `render` | `{ volume, isMuted, setVolume, toggleMute }` |
+Слои описываются **единым массивом `Cue`**, а не хардкодом `<Sequence>` в TSX. Меняете массив в стейте — сцена обновляется без перекомпиляции.
 
 ```tsx
-import { PlayerSandbox } from 'browser-tsx-sandbox/player';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { MusicLayer, SFXLayer, TrackLayer, useActiveCues, type Cue } from 'browser-tsx-sandbox';
+
+const cues: Cue<any>[] = [
+  { id: 'bgm',   type: 'music',   startFrame: 0,  payload: { src: 'bgm.mp3', volume: 0.8 } },
+  { id: 'voice', type: 'voice',   startFrame: 60, durationInFrames: 120, payload: { src: 'voice.mp3' } },
+  { id: 'sfx',   type: 'sfx',     startFrame: 30, payload: { src: 'pop.ogg' } },
+  { id: 'cap',   type: 'caption', startFrame: 60, durationInFrames: 60, payload: { text: 'Привет!' } },
+  { id: 'st',    type: 'sticker', startFrame: 30, durationInFrames: 80, payload: { x: '20%', icon: 'Zap' } },
+];
+
+export default function Scene() {
+  // Audio Ducking: музыка затихает, пока звучит озвучка.
+  const duck = (frame: number) => (frame >= 60 && frame <= 180 ? 0.15 : 1);
+  const caption = useActiveCues(cues, 'caption')[0]?.payload?.text;
+
+  return (
+    <AbsoluteFill>
+      <MusicLayer cues={cues} volumeDucking={duck} />
+      <SFXLayer cues={cues} globalVolume={0.9} />
+      <TrackLayer cues={cues} type="sticker" renderCue={(c) => <Sticker {...c.payload} />} />
+      {caption ? <Caption text={caption} /> : null}
+    </AbsoluteFill>
+  );
+}
+```
+
+| Слой | Что делает |
+|---|---|
+| `MusicLayer` | фоновая музыка с покадровым `volumeDucking` (Audio Ducking) |
+| `SFXLayer` | оборачивает `type: 'sfx'` в `<Sequence><Audio /></Sequence>` |
+| `TrackLayer` | универсальный визуальный трек: тайминг задаёт `<Sequence>`, контент — `renderCue` |
+| `useActiveCues(cues, type?)` | события, активные на текущем кадре (субтитры, HUD) |
+
+Готовые примеры: `examples/data-driven-timeline.tsx`, `examples/voiceover-animation.tsx`.
+
+### Редактор без перекомпиляции
+
+Держите `cues` в состоянии UI и подавайте через `inputProps` — `code` не меняется, а кадр обновляется:
+
+```tsx
+const [cues, setCues] = useState<Cue[]>([]);
+
+<PlayerSandbox config={{
+  code: SCENE_TSX,                       // не меняется
+  modules: { remotion, 'browser-tsx-sandbox': Timeline },
+  inputProps: { cues },                  // сцена читает cues из пропсов
+  durationInFrames: 300, fps: 30,
+}} />
+```
+
+---
+
+## 🎨 Headless UI плеера
+
+<img src="./assets/readme/headless.svg" width="100%" alt="PlayerSandbox.Root хранит состояние; PlayButton, Timeline, TimeDisplay и VolumeControl отдают его через render props">
+
+`PlayerSandbox.Root` хранит состояние в `PlayerContext`, а каждый примитив можно полностью заменить — логика остаётся внутри, разметку задаёте вы.
+
+```tsx
+import { PlayerSandbox, usePlayerContext } from 'browser-tsx-sandbox/player';
+import { Play, Pause } from 'lucide-react';
 
 <PlayerSandbox.Root config={{ code, durationInFrames: 300, fps: 30 }}>
-  {/* Само окно просмотра */}
-  <div className="rounded-xl overflow-hidden shadow-2xl border border-gray-800">
-    <PlayerSandbox />
-  </div>
+  <div className="rounded-xl overflow-hidden"><PlayerSandbox /></div>
 
-  {/* Абсолютно своя панель управления */}
-  <div className="flex items-center gap-4 bg-gray-900 p-4 mt-4 rounded-xl">
+  <div className="flex items-center gap-4 bg-gray-900 p-4 rounded-xl">
     <PlayerSandbox.PlayButton>
       {({ isPlaying, toggle }) => (
-        <button onClick={toggle} className="p-3 bg-blue-600 hover:bg-blue-500 rounded-full text-white transition">
+        <button onClick={toggle} className="p-3 bg-blue-600 rounded-full text-white">
           {isPlaying ? <Pause size={20} /> : <Play size={20} />}
         </button>
       )}
@@ -547,55 +169,39 @@ import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
     <PlayerSandbox.Timeline
       render={({ currentFrame, durationInFrames, seekTo }) => (
-        <input
-          type="range"
-          className="flex-1 accent-blue-500"
-          min={0}
-          max={durationInFrames}
-          value={currentFrame}
-          onChange={(e) => seekTo(Number(e.target.value))}
-        />
+        <input type="range" className="flex-1" min={0} max={durationInFrames}
+          value={currentFrame} onChange={(e) => seekTo(Number(e.target.value))} />
       )}
     />
 
     <PlayerSandbox.TimeDisplay
-      render={({ time, totalTime }) => (
-        <span className="font-mono text-sm text-gray-400">{time} / {totalTime}</span>
-      )}
+      render={({ time, totalTime }) => <span className="font-mono text-gray-400">{time} / {totalTime}</span>}
     />
 
     <PlayerSandbox.VolumeControl
       render={({ volume, isMuted, setVolume, toggleMute }) => (
-        <div className="flex items-center gap-2 group">
-          <button onClick={toggleMute} className="text-gray-400 hover:text-white">
-            {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </button>
-          <input
-            type="range" min={0} max={1} step={0.01} value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-            className="w-20 accent-blue-500"
-          />
-        </div>
+        <input type="range" min={0} max={1} step={0.01} value={volume}
+          onChange={(e) => setVolume(Number(e.target.value))} />
       )}
     />
   </div>
 </PlayerSandbox.Root>
 ```
 
-Любой компонент внутри `PlayerSandbox.Root` может читать состояние через `usePlayerContext()`:
+| Примитив | API | Контекст |
+|---|---|---|
+| `PlayButton` | `children`-функция | `{ isPlaying, toggle }` |
+| `Timeline` | `render` | `{ currentFrame, durationInFrames, seekTo }` |
+| `TimeDisplay` | `render` | `{ frame, totalFrames, time, totalTime, fps }` |
+| `VolumeControl` | `render` | `{ volume, isMuted, setVolume, toggleMute }` |
 
-```tsx
-import { usePlayerContext } from 'browser-tsx-sandbox/player';
+Внутри `PlayerSandbox.Root` доступен и хук `usePlayerContext()` — для горячих клавиш и внешних контролов. Без render prop примитивы рендерят дефолтную разметку.
 
-function JumpToMiddle() {
-  const { seekTo, durationInFrames } = usePlayerContext();
-  return <button onClick={() => seekTo(durationInFrames / 2)}>На середину</button>;
-}
-```
+---
 
-### 🎵 Аудио: музыка и озвучка
+## 🎵 Аудио: музыка, озвучка, SFX
 
-Звук микшируется штатным тегом `<Audio />` из Remotion — декодирование и синхронизация с таймлайном идут в браузере. Файлы (MP3/WAV) загружаются пользователем, превращаются в `blob:`-ссылки и передаются в `config.assets`:
+Звук собирается штатным `<Audio />` из Remotion: ассеты (MP3/WAV/OGG) загружаются пользователем, превращаются в `blob:` и передаются в `config.assets`.
 
 ```tsx
 const assets = {
@@ -606,28 +212,19 @@ const assets = {
 <PlayerSandbox config={{ code, assets }} />
 ```
 
-В TSX ассет подключается через `staticFile`, а громкость музыки анимируется от кадра — это и есть Audio Ducking (музыка затихает, пока говорит диктор):
-
 ```tsx
 import { Audio, Sequence, staticFile, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 
 export default function Scene() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-
-  const voiceStart = 60;
-  const voiceEnd = 240;
-  const bgmVolume = interpolate(
-    frame,
-    [voiceStart - 20, voiceStart, voiceEnd, voiceEnd + 20],
-    [0.8, 0.15, 0.15, 0.8],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
-  );
+  const bgmVolume = interpolate(frame, [45, 60, 180, 195], [0.8, 0.15, 0.15, 0.8],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <>
       <Audio src={staticFile('bgm.mp3')} volume={bgmVolume} />
-      <Sequence from={voiceStart} durationInFrames={voiceEnd - voiceStart}>
+      <Sequence from={60} durationInFrames={120}>
         <Audio src={staticFile('voice.mp3')} volume={1} />
       </Sequence>
     </>
@@ -635,257 +232,140 @@ export default function Scene() {
 }
 ```
 
-> Готовые примеры и e2e-рендеры: `examples/audio-ducking-scene.tsx` + `npm run render:audio` (генерирует WAV-тоны, рендерит `audio-ducking.mp4` с AAC-дорожкой), `examples/audio-animation-scene.tsx` + `npm run render:animation` (скачивает реальную музыку и SFX, синхронизирует их с битом) и `examples/voiceover-animation.tsx` + `npm run render:voiceover` (реальная озвучка из `examples/voice/voice_01.wav` + музыка с ducking + SFX). Полный API — в [`API.md`](./API.md), разделы 21–22.
+> `MusicLayer` использует тот же приём: Remotion `<Audio volume={(frame) => number}>` позволяет считать ducking покадрово.
 
-### ⏱ Data-Driven Timeline (музыка, SFX и объекты)
+---
 
-Вместо хардкода `<Sequence>`/`<Audio>` в TSX слои описываются единым JSON-массивом `Cue`. Это то, что нужно видеоредактору или AI-генератору: достаточно поменять массив в стейте и передать его в `inputProps` — сцена перерисуется без перекомпиляции кода.
+## 🏗 Как это работает
 
-```tsx
-import { MusicLayer, SFXLayer, TrackLayer, useActiveCues, type Cue } from 'browser-tsx-sandbox';
+<img src="./assets/readme/architecture.svg" width="100%" alt="Пайплайн: вход TSX/VFS, резолв импортов и ассетов, компиляция Sucrase, изолированное исполнение, рендер в Player или MP4">
 
-const cues: Cue<any>[] = [
-  { id: 'bgm', type: 'music', startFrame: 0, payload: { src: 'bgm.mp3', volume: 0.8 } },
-  { id: 'sfx', type: 'sfx', startFrame: 30, payload: { src: 'pop.ogg' } },
-  { id: 'cap', type: 'caption', startFrame: 60, durationInFrames: 60, payload: { text: 'Привет!' } },
-  { id: 'st', type: 'sticker', startFrame: 60, durationInFrames: 50, payload: { x: '60%', icon: 'Zap' } },
-];
+1. **Input** — строка TSX или виртуальная файловая система (`files` + `entry`).
+2. **Resolve** — `ImportResolver` ищет локальные файлы в VFS, недостающие npm-пакеты тянет с CDN, ассеты подменяет на `blob:`.
+3. **Compile** — Sucrase транспилирует TSX → CommonJS (опционально в Web Worker).
+4. **Evaluate** — `new Function` в изолированной области (`window`, `document`, `fetch`, `localStorage` затенены в `undefined`).
+5. **Render** — компонент играет в `@remotion/player` или рендерится в MP4 офлайн (Node + Chrome).
 
-export default function Scene() {
-  // Ducking: приглушаем музыку, пока звучит озвучка.
-  const duck = (frame: number) => (frame >= 60 && frame <= 180 ? 0.15 : 1);
-  const caption = useActiveCues(cues, 'caption')[0]?.payload?.text;
+### Возможности ядра
 
-  return (
-    <>
-      <MusicLayer cues={cues} volumeDucking={duck} />
-      <SFXLayer cues={cues} globalVolume={0.9} />
-      <TrackLayer cues={cues} type="sticker" renderCue={(c) => <Sticker {...c.payload} />} />
-      {caption ? <Caption text={caption} /> : null}
-    </>
-  );
-}
+| Возможность | API |
+|---|---|
+| Компиляция TSX → CJS | `compileTsx`, `SucraseCompilerAdapter` |
+| Оркестрация пайплайна | `SandboxFacade` (`compile`, `setAssets`, `registerModule`) |
+| React-хук с debounce/abort | `useLiveSandbox` |
+| Виртуальная ФС | `files` + `entry`, `resolveVfsPath`, `scanImports` |
+| NPM с CDN | `loadMissingModules`, `defaultCdnResolver`, `defaultImporter` |
+| Кэш модулей + IndexedDB | `ModuleCache` |
+| Защита от зависаний | `injectLoopProtection`, `ExecutionTimeoutError` |
+| Компиляция в воркере | `WorkerCompilerAdapter`, `createCompilerWorker` |
+| Плагины пайплайна | `plugins: [{ beforeCompile, afterCompile }]` |
+| Фазы ошибок | `getErrorPhase`, `ErrorPhase`, `CompilerError`… |
+| Типы для Monaco/CodeMirror | `getSandboxTypeDefinitions` |
+| ZIP-ассеты | `extractAssetZip`, `createAssetUrlMap`, `releaseAssetUrls` |
+
+### Надёжность плеера (v0.4.0)
+
+- **Smart Frame Retention** — при перекомпиляции сохраняются кадр и play (`smartFrameRetention`).
+- **Императивный API** — `PlayerSandboxRef`: `seekTo`, `getCurrentFrame`, `play/pause/toggle`, `takeSnapshot`, `resetZoomPan`, `getActiveDelayHandles`, `getRemotionPlayerRef`.
+- **delayRender Watchdog** — снимает зависшую блокировку кадра (`createRemotionWatchdog`).
+- **WebGL Guard** — освобождает контексты при размонтировании (`cleanupCanvasWebGl`).
+- **Snapshot** — PNG/JPEG текущего кадра прямо в браузере (`takeContainerSnapshot`).
+- **Safe Zones** — `tiktok-9x16`, `reels-9x16`, `shorts-9x16`, `tv-safe-16x9`, `rule-of-thirds`, `center-cross`.
+- **Studio Canvas** — `canvasControls: { zoom, pan }` (Ctrl+Wheel, Shift+Drag).
+
+---
+
+## 📦 Ассеты и внешние библиотеки
+
+**ZIP-архив** медиа → карта `blob:`-ссылок:
+
+```ts
+import { extractAssetZip, createAssetUrlMap, releaseAssetUrls } from 'browser-tsx-sandbox';
+
+const archive = extractAssetZip(zipBytes);
+const urls = createAssetUrlMap(archive, (bytes) => URL.createObjectURL(new Blob([bytes])));
+facade.setAssets(urls);            // staticFile('clip.mp4') → blob:
+// ...
+releaseAssetUrls(urls, URL.revokeObjectURL);
 ```
 
-- **`MusicLayer`** — фоновая музыка с покадровым `volumeDucking` (Audio Ducking).
-- **`SFXLayer`** — автоматически оборачивает `type: 'sfx'` в `<Sequence><Audio /></Sequence>`.
-- **`TrackLayer`** — универсальный визуальный трек (стикеры, плашки): тайминг берёт на себя `<Sequence>`.
-- **`useActiveCues`** — возвращает события, активные на текущем кадре (удобно для субтитров).
-
-> Полный пример: `examples/data-driven-timeline.tsx`, рендер — `npm run render:timeline` (`data-driven-timeline.mp4`). Версия с реальной озвучкой — `examples/voiceover-animation.tsx` (`npm run render:voiceover`). Схема `Cue` — в [`API.md`](./API.md), раздел 23.
-
-### Пример: редактируемый таймлайн без перекомпиляции
-
-Главный сценарий видеоредактора: `cues` живут в состоянии UI, а сцена получает их через `inputProps`. При изменении массива Remotion перерисовывает кадр — **TSX не перекомпилируется**.
+**Динамический npm** — просто импортируйте пакет в TSX; он подгрузится с `esm.sh` во время выполнения:
 
 ```tsx
-import { useMemo, useState } from 'react';
-import * as Remotion from 'remotion';
-import * as Timeline from 'browser-tsx-sandbox';
-import { PlayerSandbox } from 'browser-tsx-sandbox/player';
-
-// Код сцены не меняется. cues приходят пропсами из inputProps.
-const SCENE = `
-import React from 'react';
-import { AbsoluteFill } from 'remotion';
-import { MusicLayer, SFXLayer, TrackLayer, useActiveCues } from 'browser-tsx-sandbox';
-import { Zap } from 'lucide-react';
-
-export default function Scene({ cues = [] }) {
-  const caption = useActiveCues(cues, 'caption')[0]?.payload?.text;
-  return (
-    <AbsoluteFill className="bg-slate-950 items-center justify-center">
-      <MusicLayer cues={cues} volumeDucking={(frame) => 1} />
-      <SFXLayer cues={cues} globalVolume={0.9} />
-      <TrackLayer
-        cues={cues}
-        type="sticker"
-        renderCue={(cue) => (
-          <div style={{ position: 'absolute', left: cue.payload.x }}>
-            <Zap size={120} className="text-amber-400" />
-          </div>
-        )}
-      />
-      {caption ? <h1 className="text-white text-6xl font-black">{caption}</h1> : null}
-    </AbsoluteFill>
-  );
-}
-`;
-
-export function Editor() {
-  const [cues, setCues] = useState([
-    { id: 'bgm', type: 'music', startFrame: 0, payload: { src: 'bgm.mp3', volume: 0.8 } },
-  ]);
-
-  const addSfx = () =>
-    setCues((prev) => [
-      ...prev,
-      { id: `sfx-${prev.length}`, type: 'sfx', startFrame: 30, payload: { src: 'pop.ogg' } },
-    ]);
-
-  const assets = useMemo(
-    () => ({ 'bgm.mp3': URL.createObjectURL(bgmFile), 'pop.ogg': URL.createObjectURL(popFile) }),
-    [],
-  );
-
-  return (
-    <>
-      <button onClick={addSfx}>+ SFX</button>
-      <PlayerSandbox
-        config={{
-          code: SCENE,
-          assets,
-          modules: { remotion: Remotion, 'browser-tsx-sandbox': Timeline },
-          inputProps: { cues }, // изменение -> сцена обновляется, компиляции нет
-          durationInFrames: 300,
-          fps: 30,
-        }}
-      />
-    </>
-  );
-}
+import { motion } from 'framer-motion';   // esm.sh/framer-motion
+import * as d3 from 'd3';                 // esm.sh/d3
+import confetti from 'canvas-confetti';
 ```
 
-### Демо-страница
+Свой CDN или компилятор — через `cdnResolver`, `compiler`, `importer`.
+
+---
+
+## 🎬 Рендер видео (офлайн, Node + Chrome)
+
+| Команда | Результат |
+|---|---|
+| `npm run render` | PNG-кадр + MP4 из сцены песочницы |
+| `npm run render:assets` | сцена с медиа из ZIP (`OffthreadVideo` + `Img`) |
+| `npm run render:example` | пример `examples/remotion-scene.tsx` |
+| `npm run render:widgets` | виджеты из JSON-каталога |
+| `npm run render:cdn` | d3/three, скачанные с esm.sh прямо в браузере |
+| `npm run render:showcase` | Tailwind + lucide + d3/three в одной сцене |
+| `npm run render:audio` | музыка + озвучка + Audio Ducking |
+| `npm run render:animation` | ритм-анимация со скачанными музыкой и SFX |
+| `npm run render:timeline` | Data-Driven Timeline из массива `Cue` |
+| `npm run render:voiceover` | реальная озвучка `examples/voice/voice_01.wav` + музыка + SFX |
+
+> Рендер в файл (`renderMedia`) — офлайн в Node + Chrome. В браузере доступен мгновенный предпросмотр через Player.
+
+Демо: `npm run demo` (редактор + Player), `/studio.html` (Smart Frame Retention, snapshot, safe zones, зум, headless-тулбар).
+
+---
+
+## ✅ Тесты и качество
+
+| Команда | Что проверяет |
+|---|---|
+| `npm test` | 165 юнит-тестов (компилятор, песочница, timeline, Player, примитивы) |
+| `npm run test:e2e` | реальный рендер в Chrome: кадры, H.264 + AAC |
+| `npm run test:network` | загрузка d3/three/canvas-confetti с esm.sh |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run verify:video` | разбор MP4 (кодек, размеры, длительность) |
+
+---
+
+## 📖 Документация
+
+- **[`API.md`](./API.md)** — полный справочник: `SandboxFacade`, `useLiveSandbox`, `<Sandbox>`, `<PlayerSandbox>`, headless-примитивы, Timeline, ассеты, ошибки, безопасность.
+- **Демо-страницы** — `demo/index.html`, `demo/studio.html`.
+- **Примеры** — `examples/`.
+
+---
+
+## ⚠️ Ограничения
+
+- **Безопасность.** Затенение глобалов (`window`, `document`, `fetch`…) — защита от случайного и вредоносного доступа, но исполнение идёт в том же JS-realm: это не изоляция уровня ОС. Не запускайте непроверенный код без собственного sandbox-контура.
+- **Сеть.** NPM-импорты и часть e2e требуют доступа к CDN. В Node нативные `https`-импорты не поддерживаются — тесты используют адаптер с `?bundle`.
+- **`takeSnapshot`** для canvas-сцен (WebGL/2D) даёт настоящий PNG/JPEG; для чисто DOM-сцен браузер может пометить canvas как *tainted* и вернётся SVG data-URL.
+- **Браузерный рендер в файл** невозможен — только офлайн (Node + Chrome) или предпросмотр в Player.
+
+---
+
+## 🛠 Разработка
 
 ```bash
-npm run demo        # vite demo --open — откроет страницу в браузере
-npm run demo:build  # статика в demo/dist
+npm install
+npm test            # юнит-тесты
+npm run test:e2e    # реальный рендер (нужен Chrome)
+npm run typecheck
+npm run build       # tsup → dist/ (ESM + CJS + d.ts)
+npm run pack:check  # содержимое npm-тарбола
 ```
 
-`demo/` — интерактивная песочница: слева редактор TSX, справа живой `<PlayerSandbox />`. Правишь код → «Compile & Preview» → результат сразу играет в Player (play/pause/seek). Компиляция идёт в браузере через сам пакет; `remotion` передаётся в `config.modules`.
+Публикуются только `dist/`, `README.md`, `API.md`. `react` — peer, `sucrase`/`fflate` — зависимости, `@remotion/player`/`remotion` — optional peer.
 
 ---
 
-## 🆕 Возможности v0.3.0
+## License
 
-- 🗂️ **Virtual File System (VFS):** вход `files: { '/App.tsx': '...', '/Button.tsx': '...' }` + `entry`, с относительными импортами `./` и `../`.
-- 🛡️ **Anti-freeze Loop Protection:** `while(true)`/долгие циклы прерываются `ExecutionTimeoutError` (`loopProtect`, `maxIterations`), не вешая вкладку.
-- 🧯 **Встроенный ErrorBoundary:** ошибки рендера не роняют хост-UI, а уходят в `renderError({ error, isRuntime: true })`.
-- ⚡ **Debounce + AbortSignal:** `debounceMs` для Monaco/CodeMirror и отмена устаревших компиляций/загрузок.
-- 🌐 **Pluggable CDN и компилятор:** `cdnResolver`, `compiler: CompilerAdapter`, `importer`.
-- 🧵 **Web Worker компиляция:** `WorkerCompilerAdapter` (Sucrase в воркере, fallback на main thread).
-- 💡 **Type Definitions Helper:** `getSandboxTypeDefinitions()` для автодополнения в Monaco/CodeMirror.
-- 🔌 **Pipeline-плагины:** `plugins: [{ name, beforeCompile, afterCompile }]` для кастомной обработки файлов.
-- 🧭 **Фазы ошибок:** `EvaluationResult.errorPhase` (`compiler` / `network` / `security` / `timeout` / `runtime`) и координаты ошибки (`line`, `column`, `snippet`).
-
-```tsx
-import { Sandbox } from 'browser-tsx-sandbox';
-
-<Sandbox
-  config={{
-    files: {
-      '/Button.tsx': `export const Button = () => <button>Click</button>;`,
-      '/App.tsx': `
-        import { Button } from './Button';
-        export default () => <div><Button /></div>;
-      `,
-    },
-    entry: '/App.tsx',
-    debounceMs: 250,
-    loopProtect: true,
-    maxIterations: 500_000,
-    cdnResolver: (pkg) => `https://esm.sh/${pkg}`,
-    renderError: ({ error, isRuntime }) => <pre>{isRuntime ? 'Runtime' : 'Compile'}: {error.message}</pre>,
-  }}
-/>
-```
-
----
-
-## 🎬 Видеостудия: надёжность и кастомизация плеера (v0.4.0)
-
-Пакет `browser-tsx-sandbox/player` получил инструменты уровня видеоредактора (CapCut/Premiere/Figma).
-
-**Developer UX**
-- **Smart Frame Retention** — при рекомпиляции кода плеер сохраняет текущий кадр и состояние play (`smartFrameRetention`, по умолчанию `true`).
-- **Императивный `PlayerSandboxRef`:** `seekTo`, `getCurrentFrame`, `play/pause/toggle`, `takeSnapshot`, `resetZoomPan`, `getActiveDelayHandles`, `getRemotionPlayerRef`.
-- **Snapshot кадра в браузере** (`takeSnapshot`) — Zero-Backend экспорт постера.
-- **Headless compound UI:** `PlayerSandbox.Root / .PlayButton / .TimeDisplay / .Timeline / .VolumeControl / .Guides` — собственный интерфейс через `PlayerContext`/`usePlayerContext`.
-
-**Надёжность**
-- **delayRender Watchdog** (`delayRenderTimeoutMs`) — принудительно снимает зависшую блокировку кадра (`createRemotionWatchdog`).
-- **WebGL Context Guard** (`cleanupCanvasWebGl`) — высвобождает контексты при размонтировании (Three.js/Pixi).
-- **Safe Zones Overlay** — `tiktok-9x16`, `reels-9x16`, `shorts-9x16`, `tv-safe-16x9`, `rule-of-thirds`, `center-cross`.
-- **Studio Canvas** — `canvasControls: { zoom, pan, minZoom, maxZoom }` (Ctrl+Wheel зум, Shift+Drag пан).
-
-```tsx
-import { PlayerSandbox } from 'browser-tsx-sandbox/player';
-import type { PlayerSandboxRef } from 'browser-tsx-sandbox/player';
-
-const ref = useRef<PlayerSandboxRef>(null);
-
-<PlayerSandbox
-  ref={ref}
-  config={{
-    code,
-    modules: { remotion: Remotion },
-    durationInFrames: 300,
-    fps: 30,
-    width: 1080,
-    height: 1920,
-    safeZone: ['tiktok-9x16', 'rule-of-thirds'],
-    canvasControls: { enabled: true, minZoom: 0.25, maxZoom: 4 },
-    smartFrameRetention: true,
-    delayRenderTimeoutMs: 4000,
-  }}
-/>;
-
-const png = await ref.current?.takeSnapshot({ format: 'image/png' });
-ref.current?.seekTo(142);
-```
-
-**Демо-страницы** (`npm run demo` открывает Player, `/studio.html` — студию):
-- `demo/index.html` — редактор TSX + живой Player.
-- `demo/studio.html` — Smart Frame Retention, ref-API, захват кадра, safe zones, зум, headless-тулбар.
-
-> **Ограничение `takeSnapshot`:** если в сцене есть `<canvas>` (WebGL/2D), возвращается настоящий PNG/JPEG. Для чисто DOM-сцен браузер помечает canvas как *tainted* при `foreignObject`, поэтому возвращается SVG data-URL (рендерится как изображение; для пиксельного PNG используйте canvas-сцены или `modern-screenshot`).
-
----
-
-## 🆕 Возможности v0.5.0 — аудио и Data-Driven Timeline
-
-- 🎵 **Аудио-движок:** фоновая музыка и озвучка через `<Audio />`, Audio Ducking по кадрам, ассеты из `blob:`/файлов.
-- ⏱ **Data-Driven Timeline:** `Cue<T>` + `MusicLayer` / `SFXLayer` / `TrackLayer` / `useActiveCues` — слои описываются JSON-массивом и обновляются через `inputProps` без перекомпиляции.
-- 🎨 **Headless Render Props:** `PlayerSandbox.PlayButton` (`children`), `.Timeline` / `.TimeDisplay` / `.VolumeControl` (`render`) отдают состояние наружу.
-- 🧪 **Примеры и e2e:** `npm run render:audio | render:animation | render:timeline | render:voiceover` (в т.ч. реальная озвучка `examples/voice/voice_01.wav`).
-
-```tsx
-import { MusicLayer, SFXLayer, TrackLayer } from 'browser-tsx-sandbox';
-
-<MusicLayer cues={cues} volumeDucking={(frame) => (frame >= 60 && frame <= 180 ? 0.15 : 1)} />
-<SFXLayer cues={cues} globalVolume={0.9} />
-<TrackLayer cues={cues} type="sticker" renderCue={(cue) => <Sticker {...cue.payload} />} />
-```
-
----
-
-## 📦 Сборка и публикация пакета
-
-```bash
-npm run build        # tsup -> dist/ (ESM + CJS + .d.ts)
-npm run pack:check   # npm pack --dry-run: содержимое тарбола
-npm pack             # собрать browser-tsx-sandbox-<version>.tgz
-```
-
-- Форматы: `dist/index.js` (ESM), `dist/index.cjs` (CJS), `dist/index.d.ts` (`exports`-карта настроена).
-- В публикацию попадают только `dist/`, `README.md`, `API.md` (поле `files`).
-- `react` — `peerDependency`, `sucrase` и `fflate` — `dependencies`; все они `external` и не бандлятся.
-- `prepack` автоматически собирает `dist/`, `prepublishOnly` прогоняет `typecheck` + `test`.
-- Публикация: `npm publish` (при необходимости `--access public`).
-
-Сгенерированные артефакты (`dist/`, `render/out`, `render/bundle*`, `render/.generated`, `render/public`, `*.tgz`) не коммитятся — см. `.gitignore`.
-
-## ✅ Проверка выдачи видео
-
-`render/verify-video.mjs` — автономный парсер MP4 (ISO BMFF): проверяет `ftyp`/`moov`, кодек `avc1`, размеры кадра и длительность. Если в системе есть `ffprobe`, дополнительно сверяет кодек, число кадров и длительность.
-
-```bash
-npm run verify:video render/out/sandbox.mp4   # можно и директорию с .mp4
-```
-
-Пример: `majorBrand: isom`, `h264`, `640x360`, `60` кадров, `2.0s`, `valid: true`. Тест — `render/video.e2e.test.ts`.
-
----
-
-*Создано для систем AI-видеогенерации нового поколения. 100% Client-Side. 100% Freedom.*
+[MIT](./package.json) © browser-tsx-sandbox

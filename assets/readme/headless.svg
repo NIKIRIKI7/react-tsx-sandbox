@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="hlTitle hlDesc">
+  <title id="hlTitle">Headless player UI</title>
+  <desc id="hlDesc">PlayerSandbox.Root holds the player state in PlayerContext. PlayButton, Timeline, TimeDisplay and VolumeControl expose that state through render props so you can supply your own UI.</desc>
+
+  <defs>
+    <marker id="hlArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3E5375"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="360" rx="28" fill="#080D18"/>
+  <text x="64" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="36" font-weight="800" fill="#E8EEF9">Headless player UI</text>
+  <text x="64" y="98" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="19" fill="#93A4C0">PlayerSandbox.Root owns the state; every control is a render prop you can replace.</text>
+
+  <!-- root -->
+  <rect x="64" y="150" width="320" height="170" rx="16" fill="#0E1830" stroke="#2A4A5A" stroke-width="1.5"/>
+  <rect x="64" y="150" width="6" height="170" rx="3" fill="#4FDBC8"/>
+  <text x="92" y="186" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#4FDBC8">PlayerSandbox.Root</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" fill="#C7D3E6">
+    <text x="92" y="220" font-size="18" font-weight="700">Player + PlayerContext</text>
+    <text x="92" y="250" font-size="17" fill="#93A4C0">currentFrame · isPlaying</text>
+    <text x="92" y="274" font-size="17" fill="#93A4C0">seekTo · toggle · volume</text>
+    <text x="92" y="298" font-size="17" fill="#93A4C0">zoom · pan · takeSnapshot</text>
+  </g>
+
+  <line x1="390" y1="235" x2="452" y2="235" stroke="#3E5375" stroke-width="2" marker-end="url(#hlArrow)"/>
+
+  <!-- render-prop cards -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif">
+    <g>
+      <rect x="460" y="150" width="320" height="78" rx="14" fill="#0C1526" stroke="#1F2E49" stroke-width="1.5"/>
+      <rect x="460" y="150" width="5" height="78" rx="2.5" fill="#4FDBC8"/>
+      <text x="482" y="181" font-size="20" font-weight="700" fill="#E8EEF9">PlayButton</text>
+      <text x="482" y="206" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#8FA2C2">children → isPlaying, toggle</text>
+    </g>
+    <g>
+      <rect x="796" y="150" width="320" height="78" rx="14" fill="#0C1526" stroke="#1F2E49" stroke-width="1.5"/>
+      <rect x="796" y="150" width="5" height="78" rx="2.5" fill="#67E8F9"/>
+      <text x="818" y="181" font-size="20" font-weight="700" fill="#E8EEF9">Timeline</text>
+      <text x="818" y="206" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#8FA2C2">render → currentFrame, seekTo</text>
+    </g>
+    <g>
+      <rect x="460" y="242" width="320" height="78" rx="14" fill="#0C1526" stroke="#1F2E49" stroke-width="1.5"/>
+      <rect x="460" y="242" width="5" height="78" rx="2.5" fill="#C4A8FF"/>
+      <text x="482" y="273" font-size="20" font-weight="700" fill="#E8EEF9">TimeDisplay</text>
+      <text x="482" y="298" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#8FA2C2">render → time, totalTime</text>
+    </g>
+    <g>
+      <rect x="796" y="242" width="320" height="78" rx="14" fill="#0C1526" stroke="#1F2E49" stroke-width="1.5"/>
+      <rect x="796" y="242" width="5" height="78" rx="2.5" fill="#FBBF24"/>
+      <text x="818" y="273" font-size="20" font-weight="700" fill="#E8EEF9">VolumeControl</text>
+      <text x="818" y="298" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#8FA2C2">render → volume, isMuted</text>
+    </g>
+  </g>
+
+  <text x="64" y="346" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="17" fill="#7C90B0">Bring Tailwind, Radix UI or MUI — the player logic stays in the sandbox.</text>
+</svg>

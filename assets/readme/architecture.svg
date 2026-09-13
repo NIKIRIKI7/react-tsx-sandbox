@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="archTitle archDesc">
+  <title id="archTitle">browser-tsx-sandbox pipeline</title>
+  <desc id="archDesc">Flow: TSX or virtual file system, then import resolution, Sucrase compilation, isolated evaluation, and rendering through the Remotion player or an MP4 render. npm packages load from esm.sh, assets arrive as blob URLs, and compilation can run in a Web Worker.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3E5375"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" rx="28" fill="#080D18"/>
+  <text x="64" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="40" font-weight="800" fill="#E8EEF9">How it works</text>
+  <text x="64" y="108" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="20" fill="#93A4C0">TSX source in, playable preview or MP4 out — the whole pipeline runs in the browser.</text>
+
+  <!-- flow -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif">
+    <g>
+      <rect x="64" y="168" width="190" height="104" rx="16" fill="#0E1830" stroke="#24334F" stroke-width="1.5"/>
+      <text x="86" y="200" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#4FDBC8">01</text>
+      <text x="86" y="230" font-size="22" font-weight="700" fill="#E8EEF9">Input</text>
+      <text x="86" y="256" font-size="18" fill="#93A4C0">TSX or VFS</text>
+    </g>
+    <g>
+      <rect x="284" y="168" width="190" height="104" rx="16" fill="#0E1830" stroke="#24334F" stroke-width="1.5"/>
+      <text x="306" y="200" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#4FDBC8">02</text>
+      <text x="306" y="230" font-size="22" font-weight="700" fill="#E8EEF9">Resolve</text>
+      <text x="306" y="256" font-size="18" fill="#93A4C0">imports + assets</text>
+    </g>
+    <g>
+      <rect x="505" y="168" width="190" height="104" rx="16" fill="#0E1830" stroke="#24334F" stroke-width="1.5"/>
+      <text x="527" y="200" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#4FDBC8">03</text>
+      <text x="527" y="230" font-size="22" font-weight="700" fill="#E8EEF9">Compile</text>
+      <text x="527" y="256" font-size="18" fill="#93A4C0">Sucrase → CJS</text>
+    </g>
+    <g>
+      <rect x="725" y="168" width="190" height="104" rx="16" fill="#0E1830" stroke="#24334F" stroke-width="1.5"/>
+      <text x="747" y="200" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#4FDBC8">04</text>
+      <text x="747" y="230" font-size="22" font-weight="700" fill="#E8EEF9">Evaluate</text>
+      <text x="747" y="256" font-size="18" fill="#93A4C0">isolated scope</text>
+    </g>
+    <g>
+      <rect x="946" y="168" width="190" height="104" rx="16" fill="#12243A" stroke="#3A5A6E" stroke-width="1.5"/>
+      <text x="968" y="200" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#67E8F9">05</text>
+      <text x="968" y="230" font-size="22" font-weight="700" fill="#E8EEF9">Render</text>
+      <text x="968" y="256" font-size="18" fill="#A9BAD6">Player or MP4</text>
+    </g>
+  </g>
+
+  <g stroke="#3E5375" stroke-width="2" marker-end="url(#arrow)">
+    <line x1="254" y1="220" x2="280" y2="220"/>
+    <line x1="474" y1="220" x2="501" y2="220"/>
+    <line x1="695" y1="220" x2="721" y2="220"/>
+    <line x1="915" y1="220" x2="942" y2="220"/>
+  </g>
+
+  <text x="64" y="322" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="18" fill="#7C90B0">The evaluator shadows window, document, fetch and localStorage to undefined, and interrupts infinite loops.</text>
+
+  <!-- external inputs -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="18">
+    <rect x="274" y="356" width="210" height="80" rx="14" fill="#0B1426" stroke="#2C3E5C" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="296" y="388" font-size="20" font-weight="700" fill="#C4A8FF">npm</text>
+    <text x="296" y="414" fill="#93A4C0">esm.sh / CDN</text>
+
+    <rect x="495" y="356" width="210" height="80" rx="14" fill="#0B1426" stroke="#2C3E5C" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="517" y="388" font-size="20" font-weight="700" fill="#C4A8FF">Web Worker</text>
+    <text x="517" y="414" fill="#93A4C0">compile off-thread</text>
+
+    <rect x="715" y="356" width="210" height="80" rx="14" fill="#0B1426" stroke="#2C3E5C" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="737" y="388" font-size="20" font-weight="700" fill="#C4A8FF">Assets</text>
+    <text x="737" y="414" fill="#93A4C0">blob: → staticFile()</text>
+
+    <rect x="936" y="356" width="210" height="80" rx="14" fill="#0B1426" stroke="#2C3E5C" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="958" y="388" font-size="20" font-weight="700" fill="#67E8F9">Output</text>
+    <text x="958" y="414" fill="#93A4C0">&lt;Player /&gt; · MP4</text>
+  </g>
+
+  <g stroke="#3E5375" stroke-width="2" stroke-dasharray="5 5">
+    <line x1="379" y1="352" x2="379" y2="286"/>
+    <line x1="600" y1="352" x2="600" y2="286"/>
+    <line x1="820" y1="352" x2="820" y2="286"/>
+    <line x1="1041" y1="352" x2="1041" y2="286"/>
+  </g>
+  <g fill="#3E5375">
+    <polygon points="373,288 385,288 379,276"/>
+    <polygon points="594,288 606,288 600,276"/>
+    <polygon points="814,288 826,288 820,276"/>
+    <polygon points="1035,288 1047,288 1041,276"/>
+  </g>
+</svg>
