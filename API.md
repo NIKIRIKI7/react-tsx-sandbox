@@ -1441,3 +1441,12 @@ export default function Scene({ cues = [] }) {
   );
 }
 ```
+
+---
+
+## 24. Изменения v0.5.0
+
+- **Аудио:** `examples/audio-ducking-scene.tsx`, `examples/audio-animation-scene.tsx`, `examples/voiceover-animation.tsx`; рендеры `render:audio`, `render:animation`, `render:voiceover` (озвучка из `examples/voice/voice_01.wav`).
+- **Data-Driven Timeline:** модуль `src/timeline/index.tsx` (`Cue`, `useActiveCues`, `MusicLayer`, `SFXLayer`, `TrackLayer`), пример `examples/data-driven-timeline.tsx`, рендер `render:timeline`.
+- **Headless Render Props:** `src/react/headless/Primitives.tsx` — `PlayPauseButton` (`children`-функция), `TimeDisplay` / `TimelineBar` / `VolumeControl` (проп `render`).
+- **Пакет:** `remotion` добавлен как optional peerDependency и вынесен в `external` (tsup), чтобы не бандлиться в `dist`.

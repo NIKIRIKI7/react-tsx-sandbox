@@ -843,6 +843,23 @@ ref.current?.seekTo(142);
 
 ---
 
+## 🆕 Возможности v0.5.0 — аудио и Data-Driven Timeline
+
+- 🎵 **Аудио-движок:** фоновая музыка и озвучка через `<Audio />`, Audio Ducking по кадрам, ассеты из `blob:`/файлов.
+- ⏱ **Data-Driven Timeline:** `Cue<T>` + `MusicLayer` / `SFXLayer` / `TrackLayer` / `useActiveCues` — слои описываются JSON-массивом и обновляются через `inputProps` без перекомпиляции.
+- 🎨 **Headless Render Props:** `PlayerSandbox.PlayButton` (`children`), `.Timeline` / `.TimeDisplay` / `.VolumeControl` (`render`) отдают состояние наружу.
+- 🧪 **Примеры и e2e:** `npm run render:audio | render:animation | render:timeline | render:voiceover` (в т.ч. реальная озвучка `examples/voice/voice_01.wav`).
+
+```tsx
+import { MusicLayer, SFXLayer, TrackLayer } from 'browser-tsx-sandbox';
+
+<MusicLayer cues={cues} volumeDucking={(frame) => (frame >= 60 && frame <= 180 ? 0.15 : 1)} />
+<SFXLayer cues={cues} globalVolume={0.9} />
+<TrackLayer cues={cues} type="sticker" renderCue={(cue) => <Sticker {...cue.payload} />} />
+```
+
+---
+
 ## 📦 Сборка и публикация пакета
 
 ```bash
