@@ -7,6 +7,7 @@ import {
   type VideoCodec,
 } from 'mediabunny';
 import { takeContainerSnapshot } from '../sandbox/snapshot';
+import { logger } from '../core/logger';
 
 /**
  * Zero-Backend экспорт видео: покадровый захват контейнера плеера
@@ -62,7 +63,7 @@ export interface BrowserExportOptions {
   waitRender?: () => Promise<void>;
   /** `avc` — MP4 (H.264, по умолчанию), `vp8`/`vp9` — WebM. */
   codec?: BrowserExportCodec;
-  /** Пресет качества. По умолчанию `'medium'`. */
+  /** Пресет качества. По умолчанию `'high'`. */
   quality?: ExportQuality;
   /** Битрейт видео в битах/с; приоритетнее `quality`. */
   bitrate?: number;
@@ -135,7 +136,7 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
     height,
     seekTo,
     codec = 'avc',
-    quality = 'medium',
+    quality = 'high',
     frameDelayMs = 24,
     onProgress,
     signal,
@@ -144,6 +145,16 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
   if (durationInFrames <= 0 || fps <= 0) {
     throw new Error('Export: durationInFrames и fps должны быть положительными.');
   }
+
+  logger.info('Экспорт видео: настройки', {
+    width,
+    height,
+    fps,
+    codec,
+    quality,
+    bitrate: options.bitrate ?? calculateBitrate(width, height, fps, quality),
+    frames: durationInFrames,
+  });
 
   // H.264/AVC требует чётных размеров кадра — округляем в меньшую сторону.
   const normalizedWidth = toEvenFrameSize(width);
@@ -187,13 +198,16 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
 
       const dataUrl = await takeContainerSnapshot(container, {
         format: 'image/png',
-        scale: 1,
         targetWidth: width,
         targetHeight: height,
       });
       await drawDataUrlToCanvas(dataUrl, canvas, normalizedWidth, normalizedHeight);
 
       await videoSource.add(frame * secondsPerFrame, secondsPerFrame);
+
+      if (frame % 25 === 0) {
+        logger.debug('Экспорт: кадр', { frame, total: durationInFrames });
+      }
 
       onProgress?.({
         frame,

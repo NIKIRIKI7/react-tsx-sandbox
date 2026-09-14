@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import type { CSSProperties, RefObject } from 'react';
 import type { PlayerRef } from '@remotion/player';
 import type { SnapshotOptions } from '../../sandbox/snapshot';
-import type { BrowserExportCodec, ExportQuality } from '../../export/browser-export';
+import type { BrowserExportCodec, ExportProgress, ExportQuality } from '../../export/browser-export';
 
 export interface ExportVideoOptions {
   /** Имя файла для автозагрузки. `filename: false` — только вернуть Blob. */
@@ -13,6 +13,14 @@ export interface ExportVideoOptions {
   quality?: ExportQuality;
   /** Явный битрейт в битах/с (приоритетнее `quality`). */
   bitrate?: number;
+  /** Переопределить ширину кадра (по умолчанию — размер композиции). */
+  width?: number;
+  /** Переопределить высоту кадра (по умолчанию — размер композиции). */
+  height?: number;
+  /** Переопределить fps (по умолчанию — fps композиции). */
+  fps?: number;
+  /** Прогресс экспорта: `capturing → encoding → muxing → done`. */
+  onProgress?: (progress: ExportProgress) => void;
 }
 
 export interface ExportState {
@@ -44,6 +52,7 @@ export interface PlayerContextValue {
   resetZoomPan: () => void;
   takeSnapshot: (options?: SnapshotOptions) => Promise<string>;
   exportState: ExportState;
+  getExportState: () => ExportState;
   exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
   abortExport: () => void;
 }

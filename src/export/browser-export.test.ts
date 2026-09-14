@@ -70,6 +70,16 @@ describe('export/browser-export.calculateBitrate', () => {
       calculateBitrate(1080, 1920, 30, 'high'),
     );
   });
+
+  it('yields exact bitrates for 1080×1920 @ 30fps presets', () => {
+    const pixelsPerSecond = 1080 * 1920 * 30; // 62 208 000 px/s
+    expect(calculateBitrate(1080, 1920, 30, 'high')).toBe(pixelsPerSecond * 0.2); // 12 441 600
+    expect(calculateBitrate(1080, 1920, 30, 'medium')).toBe(pixelsPerSecond * 0.1); // 6 220 800
+    expect(calculateBitrate(1080, 1920, 30, 'low')).toBe(pixelsPerSecond * 0.05); // 3 110 400
+    expect(pixelsPerSecond * 0.2).toBe(12_441_600);
+    expect(pixelsPerSecond * 0.1).toBe(6_220_800);
+    expect(pixelsPerSecond * 0.05).toBe(3_110_400);
+  });
 });
 
 describe('export/browser-export.exportBrowserVideo', () => {

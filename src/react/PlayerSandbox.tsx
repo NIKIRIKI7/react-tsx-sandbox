@@ -21,6 +21,7 @@ import type { SafeZonePreset } from './guides/SafeZonesOverlay';
 import { PlayerContext, PlayerContextValue } from './headless/PlayerContext';
 import type { ExportState, ExportVideoOptions } from './headless/PlayerContext';
 import { downloadExportBlob, exportBrowserVideo } from '../export/browser-export';
+import { logger } from '../core/logger';
 import {
   ExportButton,
   PlayPauseButton,
@@ -77,6 +78,7 @@ export interface PlayerSandboxRef {
   /** Программный экспорт видео (MP4/WebM). */
   exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
   abortExport: () => void;
+  getExportState: () => ExportState;
 }
 
 const defaultErrorStyle: React.CSSProperties = {
@@ -122,7 +124,7 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       return { ...config.modules, remotion: proxiedRemotion };
     }, [config.modules, proxiedRemotion]);
 
-    const { Component, error, isCompiling, runtimeError, setRuntimeError } = useLiveSandbox(
+    const { Component, error, isCompiling, runtimeError, setRuntimeError, metadata } = useLiveSandbox(
       input,
       proxiedModules,
       config.assets ?? {},
@@ -132,6 +134,19 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
     // Актуальная конфигурация для использования внутри мемоизированных замыканий
     const configRef = useRef(config);
     configRef.current = config;
+
+    // Параметры сцены: явные пропсы конфигурации переопределяют метаданные из TSX/JSON
+    const resolvedDurationInFrames = config.durationInFrames ?? metadata?.durationInFrames ?? 300;
+    const resolvedFps = config.fps ?? metadata?.fps ?? 30;
+    const resolvedWidth = config.width ?? metadata?.width ?? 1920;
+    const resolvedHeight = config.height ?? metadata?.height ?? 1080;
+    const resolvedInputProps: Record<string, unknown> = useMemo(
+      () => ({
+        ...(metadata?.defaultProps ?? {}),
+        ...(config.inputProps ?? {}),
+      }),
+      [metadata?.defaultProps, config.inputProps],
+    );
 
     // Мемоизируем SafeComponent, чтобы избежать ре-маунта <Player> на каждом обновлении состояния (time/play)
     const SafeComponent: React.FC<Record<string, unknown>> = useMemo(() => {
@@ -151,12 +166,14 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
             )
           }
         >
-          <Component {...props} />
+          <div data-remotion-canvas="true" style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+            <Component {...resolvedInputProps} {...props} />
+          </div>
         </SandboxErrorBoundary>
       );
       Wrapped.displayName = 'SafeComponent';
       return Wrapped;
-    }, [Component, input, setRuntimeError]);
+    }, [Component, input, setRuntimeError, resolvedInputProps]);
 
     useEffect(() => {
       if (config.smartFrameRetention === false) return;
@@ -265,8 +282,13 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       });
     }, []);
     const takeSnapshot = useCallback(
-      (options?: SnapshotOptions) => takeContainerSnapshot(containerRef.current, options),
-      [],
+      (options?: SnapshotOptions) =>
+        takeContainerSnapshot(containerRef.current, {
+          targetWidth: resolvedWidth,
+          targetHeight: resolvedHeight,
+          ...options,
+        }),
+      [resolvedWidth, resolvedHeight],
     );
 
     const abortExport = useCallback(() => {
@@ -284,37 +306,63 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
         setExportState({ isExporting: true, progress: 0, phase: 'capturing', error: null });
 
         try {
-          const currentConfig = configRef.current;
+          const outputWidth = options.width ?? resolvedWidth;
+          const outputHeight = options.height ?? resolvedHeight;
+          const outputFps = options.fps ?? resolvedFps;
+          const codec = options.codec ?? 'avc';
+          const quality = options.quality ?? 'high';
+
+          logger.info('Старт программного экспорта видео', {
+            width: outputWidth,
+            height: outputHeight,
+            fps: outputFps,
+            codec,
+            quality,
+            frames: resolvedDurationInFrames,
+          });
+
           const blob = await exportBrowserVideo({
             container,
-            durationInFrames: currentConfig.durationInFrames ?? 300,
-            fps: currentConfig.fps ?? 30,
-            width: currentConfig.width ?? 1920,
-            height: currentConfig.height ?? 1080,
+            durationInFrames: resolvedDurationInFrames,
+            fps: outputFps,
+            width: outputWidth,
+            height: outputHeight,
             seekTo,
-            codec: options.codec ?? 'avc',
-            quality: options.quality ?? 'high',
+            codec,
+            quality,
             bitrate: options.bitrate,
             signal: controller.signal,
-            onProgress: (next) =>
-              setExportState({ isExporting: true, progress: next.progress, phase: next.phase, error: null }),
+            onProgress: (next) => {
+              setExportState({
+                isExporting: true,
+                progress: next.progress,
+                phase: next.phase,
+                error: null,
+              });
+              options.onProgress?.(next);
+            },
           });
 
           if (options.filename !== false) {
             downloadExportBlob(blob, options.filename);
           }
 
+          logger.info('Экспорт завершён', {
+            size: blob.size,
+            type: blob.type,
+          });
           setExportState({ isExporting: false, progress: 1, phase: 'done', error: null });
           return blob;
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
+          logger.warn('Экспорт видео не удался', err);
           setExportState({ isExporting: false, progress: null, phase: null, error: err });
           return null;
         } finally {
           abortExportRef.current = null;
         }
       },
-      [seekTo],
+      [seekTo, resolvedWidth, resolvedHeight, resolvedFps, resolvedDurationInFrames],
     );
 
     useImperativeHandle(
@@ -332,8 +380,9 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
         resetZoomPan,
         exportVideo,
         abortExport,
+        getExportState: () => exportState,
       }),
-      [getActiveHandles, resetZoomPan, seekTo, play, pause, toggle, takeSnapshot, exportVideo, abortExport],
+      [getActiveHandles, resetZoomPan, seekTo, play, pause, toggle, takeSnapshot, exportVideo, abortExport, exportState],
     );
 
     const activeError = runtimeError ?? error;
@@ -343,8 +392,8 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       playerRef: internalPlayerRef,
       containerRef,
       currentFrame,
-      durationInFrames: config.durationInFrames ?? 300,
-      fps: config.fps ?? 30,
+      durationInFrames: resolvedDurationInFrames,
+      fps: resolvedFps,
       isPlaying,
       isMuted,
       volume,
@@ -361,12 +410,13 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       resetZoomPan,
       takeSnapshot,
       exportState,
+      getExportState: () => exportState,
       exportVideo,
       abortExport,
     }), [
       currentFrame,
-      config.durationInFrames,
-      config.fps,
+      resolvedDurationInFrames,
+      resolvedFps,
       isPlaying,
       isMuted,
       volume,
@@ -418,14 +468,14 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
           <Player
             ref={internalPlayerRef}
             component={SafeComponent}
-            durationInFrames={config.durationInFrames ?? 300}
-            fps={config.fps ?? 30}
-            compositionWidth={config.width ?? 1920}
-            compositionHeight={config.height ?? 1080}
+            durationInFrames={resolvedDurationInFrames}
+            fps={resolvedFps}
+            compositionWidth={resolvedWidth}
+            compositionHeight={resolvedHeight}
             controls={config.controls ?? true}
             loop={config.loop}
             autoPlay={config.autoPlay}
-            inputProps={config.inputProps}
+            inputProps={resolvedInputProps}
             className={config.className}
             style={{
               width: '100%',

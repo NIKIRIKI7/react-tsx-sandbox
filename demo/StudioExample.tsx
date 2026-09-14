@@ -1,9 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import * as Remotion from 'remotion';
-import { Camera, Download, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Download, Pause, Play, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { PlayerSandbox } from '../src/player';
 import type { PlayerSandboxRef } from '../src/player';
+import type { BrowserExportCodec, ExportQuality } from '../src/export/browser-export';
+import { configureLogger } from '../src/core/logger';
 import './styles.css';
 
 const STUDIO_CODE = [
@@ -38,10 +40,22 @@ function PlayerViewport({ children }: { children: ReactNode }) {
   );
 }
 
+const CODE_LABELS: Record<BrowserExportCodec, string> = {
+  avc: 'MP4 (H.264)',
+  vp9: 'WebM (VP9)',
+  vp8: 'WebM (VP8)',
+};
+
 export function StudioExample() {
   const playerRef = useRef<PlayerSandboxRef>(null);
   const [snapshot, setSnapshot] = useState('');
   const [status, setStatus] = useState('ready');
+  const [quality, setQuality] = useState<ExportQuality>('high');
+  const [codec, setCodec] = useState<BrowserExportCodec>('avc');
+
+  useEffect(() => {
+    configureLogger({ enabled: true });
+  }, []);
 
   const capture = async () => {
     try {
@@ -50,6 +64,25 @@ export function StudioExample() {
       setStatus('snapshot taken');
     } catch (error) {
       setStatus(`snapshot failed: ${(error as Error).message}`);
+    }
+  };
+
+  const programmaticExport = async () => {
+    try {
+      setStatus('exporting…');
+      const blob = await playerRef.current?.exportVideo({
+        filename: `studio-export.${codec === 'avc' ? 'mp4' : 'webm'}`,
+        codec,
+        quality,
+        onProgress: (next) => setStatus(`${Math.round(next.progress * 100)}% ${next.phase}`),
+      });
+      if (blob) {
+        setStatus(`done: ${(blob.size / 1024).toFixed(0)} KB, ${blob.type}`);
+      } else {
+        setStatus('export returned nothing');
+      }
+    } catch (error) {
+      setStatus(`export failed: ${(error as Error).message}`);
     }
   };
 
@@ -140,20 +173,61 @@ export function StudioExample() {
                 )}
               />
 
-              <PlayerSandbox.ExportButton filename="studio-export.mp4" codec="avc">
-                {({ isExporting, progress, exportVideo, supported }) => (
+              <label className="text-xs text-slate-400">
+                quality
+                <select
+                  value={quality}
+                  onChange={(event) => setQuality(event.target.value as ExportQuality)}
+                  className="ml-2 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200"
+                >
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </select>
+              </label>
+
+              <label className="text-xs text-slate-400">
+                codec
+                <select
+                  value={codec}
+                  onChange={(event) => setCodec(event.target.value as BrowserExportCodec)}
+                  className="ml-2 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200"
+                >
+                  <option value="avc">{CODE_LABELS.avc}</option>
+                  <option value="vp9">{CODE_LABELS.vp9}</option>
+                  <option value="vp8">{CODE_LABELS.vp8}</option>
+                </select>
+              </label>
+
+              <PlayerSandbox.ExportButton
+                filename={`studio-export.${codec === 'avc' ? 'mp4' : 'webm'}`}
+                codec={codec}
+                quality={quality}
+              >
+                {({ isExporting, progress, exportVideo }) => (
                   <button
                     type="button"
                     onClick={exportVideo}
-                    disabled={!supported || isExporting}
-                    aria-label="Export video as MP4"
+                    disabled={isExporting}
+                    aria-label="Export video"
                     className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-400 transition hover:bg-emerald-900/50 disabled:opacity-50"
                   >
                     <Download size={16} />
-                    {isExporting ? `Exporting ${Math.round((progress ?? 0) * 100)}%` : 'Export MP4'}
+                    {isExporting
+                      ? `Экспорт ${Math.round((progress ?? 0) * 100)}%`
+                      : `UI Экспорт (${quality})`}
                   </button>
                 )}
               </PlayerSandbox.ExportButton>
+
+              <button
+                type="button"
+                onClick={programmaticExport}
+                className="inline-flex items-center gap-2 rounded-lg border border-fuchsia-700/50 bg-fuchsia-900/30 px-3 py-2 text-sm text-fuchsia-300 transition hover:bg-fuchsia-900/50"
+              >
+                <Sparkles size={16} />
+                Export (programmatic)
+              </button>
 
               <button
                 type="button"
@@ -161,7 +235,7 @@ export function StudioExample() {
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-700"
               >
                 <Camera size={16} />
-                Capture frame
+                Кадр
               </button>
             </div>
           </PlayerSandbox.Root>
@@ -193,7 +267,8 @@ export function StudioExample() {
             )
           ) : (
             <p className="mt-3 text-sm leading-relaxed text-slate-500">
-              Нажми «Capture frame» — PNG текущего кадра берётся прямо из DOM.
+              Нажми «Кадр» — PNG текущего кадра берётся прямо из DOM. Оверлеи safe zones в кадр
+              не попадают (снимается только композиция).
             </p>
           )}
         </aside>

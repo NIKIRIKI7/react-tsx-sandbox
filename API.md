@@ -38,8 +38,9 @@ npm install browser-tsx-sandbox react remotion @remotion/player
 16. [Базовые типы](#16-базовые-типы)
 17. [Ошибки](#17-ошибки)
 18. [Модель безопасности](#18-модель-безопасности)
-19. [Тестирование и сборка](#19-тестирование-и-сборка)
-20. [История версий](#20-история-версий)
+19. [Автоопределение параметров сцены](#19-автоопределение-параметров-сцены)
+20. [Тестирование и сборка](#20-тестирование-и-сборка)
+21. [История версий](#21-история-версий)
 
 ---
 
@@ -111,8 +112,9 @@ const { component, error, errorPhase } = await facade.compile(tsxSource);
 | `MusicLayer`, `SFXLayer`, `TrackLayer`, `useActiveCues` | Data-Driven Timeline |
 | `takeContainerSnapshot`, `createRemotionWatchdog`, `cleanupCanvasWebGl` | надёжность плеера |
 | `exportBrowserVideo`, `downloadExportBlob`, `supportsBrowserExport` | MP4/WebM-экспорт через WebCodecs + mediabunny |
-| `SafeZonesOverlay` | оверлеи safe zones |
+| `SafeZonesOverlay` | оверлеи safe zones (в экспорт/снимок не попадают) |
 | `PlayerContext`, `usePlayerContext` | состояние плеера |
+| `logger`, `configureLogger` | реактивный логгер (debug/info/warn/error) |
 
 ---
 
@@ -316,6 +318,7 @@ interface PlayerSandboxRef {
   getRemotionPlayerRef: () => PlayerRef | null;
   resetZoomPan: () => void;
   exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
+  getExportState: () => ExportState;
   abortExport: () => void;
 }
 ```
@@ -325,6 +328,7 @@ const png = await ref.current?.takeSnapshot({ format: 'image/png' });
 ref.current?.seekTo(142);
 
 const mp4 = await ref.current?.exportVideo({ filename: false, quality: 'high' });
+const state = ref.current?.getExportState(); // { phase, progress, ... }
 ref.current?.abortExport();
 ```
 
@@ -335,6 +339,8 @@ ref.current?.abortExport();
 
 Захват кадра идёт в **реальном разрешении композиции** (по `config.width/height`,
 без UI-масштаба), поэтому видео не размывается при апскейле для YouTube/Instagram.
+В кадр попадает только сам компонент (`[data-remotion-canvas]`) — оверлеи safe zones,
+аудио и видео-элементы в экспорт не попадают.
 
 ```ts
 interface ExportVideoOptions {
@@ -342,10 +348,16 @@ interface ExportVideoOptions {
   codec?: 'avc' | 'vp8' | 'vp9'; // 'avc' — MP4 (по умолчанию)
   quality?: 'low' | 'medium' | 'high'; // 'high' (по умолчанию)
   bitrate?: number; // бит/с; приоритетнее quality
+  width?: number;   // разрешение кадра; по умолчанию config.width (1920)
+  height?: number;  // по умолчанию config.height (1080)
+  fps?: number;     // частота; по умолчанию config.fps (30)
+  onProgress?: (progress: ExportProgress) => void; // { phase, progress, renderedFrames, encodedFrames }
 }
 ```
 
-Прогресс и ошибки — в реактивном `exportState` из контекста плеера.
+Прогресс и ошибки — в реактивном `exportState` из контекста плеера (плюс синхронный
+`getExportState()` на рефе) и в логгере (`logger.info` — старт/финиш, `logger.debug` —
+каждые 25 кадров).
 
 ### 6.3 Headless-примитивы (compound)
 
@@ -393,6 +405,7 @@ interface PlayerContextValue {
   takeSnapshot: (options?: SnapshotOptions) => Promise<string>;
   exportState: ExportState;
   exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
+  getExportState: () => ExportState;
   abortExport: () => void;
 }
 ```
@@ -780,11 +793,18 @@ function takeContainerSnapshot(container: HTMLElement | null, options?: Snapshot
 interface SnapshotOptions {
   format?: 'image/png' | 'image/jpeg' | 'image/webp'; // 'image/png'
   quality?: number; // 0.95
-  scale?: number;   // 1
+  targetWidth?: number;   // 1920
+  targetHeight?: number;  // 1080
 }
 ```
 
-Порядок: `<canvas>` → DOM-растеризация (`foreignObject`) → SVG data-URL (если canvas *tainted*).
+Порядок: `<canvas>` → DOM-растеризация (`foreignObject` с инъекцией CSS страницы)
+→ SVG data-URL (если canvas *tainted*).
+
+Снимок снимает **только композицию**: из клона вырезаются элементы с
+`data-sandbox-overlay`, `data-testid="safe-zones-overlay"`, `.safe-zone-overlay`
+и все `<audio>/<video>`, а размер принудительно приводится к `targetWidth × targetHeight`
+(точный 1:1 кадр для Instagram/TikTok).
 
 ### 15.3 `createRemotionWatchdog`
 
@@ -827,12 +847,34 @@ type SafeZonePreset =
   | 'tv-safe-16x9' | 'rule-of-thirds' | 'center-cross';
 
 interface SafeZonesOverlayProps {
-  preset?: SafeZonePreset | SafeZonePreset[];
+  preset?: SafeZonePreset | SafeZonePreset[]; // все пресеты 9×16 можно передать массивом
   color?: string;             // 'rgba(255, 255, 255, 0.45)'
   style?: CSSProperties;
   className?: string;
 }
 ```
+
+- Координаты считаются в сетке **1080×1920** (`viewBox="0 0 1080 1920"`), поэтому
+  разметка совпадает 1:1 с экспортом: TikTok 220/200/480, Reels 220/180/440,
+  Shorts 140/200/340, TV-safe 54/96 (10%/5%) и 108/192, правило третей, центральный крест.
+- Оверлей помечен `data-sandbox-overlay="true"` — `takeContainerSnapshot` и экспорт
+  **вырезают его из кадра**.
+
+### 15.8 `logger` / `configureLogger`
+
+```ts
+function configureLogger(options: { enabled?: boolean; level?: 'debug' | 'info' | 'warn' | 'error' }): void;
+
+const logger: {
+  debug: (message: string, ...args: any[]) => void;
+  info: (message: string, ...args: any[]) => void;
+  warn: (message: string, ...args: any[]) => void;
+  error: (message: string, ...args: any[]) => void;
+};
+```
+
+Глобальный (по умолчанию выключенный) логгер. Используется снимком, экспортом
+и плеером; в проде отключается — `enabled: false` убирает вывод насовсем.
 
 ### 15.6 `getSandboxTypeDefinitions`
 
@@ -951,7 +993,114 @@ function isSandboxPassthroughError(error: unknown): boolean;
 
 ---
 
-## 19. Тестирование и сборка
+## 19. Автоопределение параметров сцены
+
+При использовании `<PlayerSandbox config={{ code: '...' }} />` без явно указанных `durationInFrames`/`fps`/`width`/`height`/`inputProps` библиотека **автоматически извлекает** их из содержимого TSX/JSON.
+
+### Как это работает
+
+`<PlayerSandbox>` вызывает `extractSceneMetadata()` при каждой компиляции и передаёт
+параметры в `@remotion/player`. Если в `config` указаны явные пропсы — они переопределяют
+значения извлечённые из кода (приоритет: **config > metadata > дефолт**).
+
+### Источники (в порядке приоритета)
+
+| # | Источник | Что извлекается |
+|---|---|---|
+| 1 | `export const compositionConfig = { … }` (или `config`, `sceneConfig`, `metadata`) | `id`, `durationInFrames`/`durationFrames`, `fps`, `width`, `height`, `defaultProps`/`inputProps` |
+| 2 | `export const durationInFrames = …`, `export const fps = …` и т.д. | Прямые именованные экспорт-значения |
+| 3 | `Scene.durationInFrames = …`, `Scene.defaultProps = { … }` (статика компонента) | Статические поля функции |
+| 4 | `<Composition id="…" durationInFrames={…} fps={…} width={…} height={…} />` в тексте кода | Regex fallback (строка, `<Composition/>`) |
+| 5 | JSON: `{"durationInFrames":…}` или Vidora-каталог (`widgets[0]`) | Прямой JSON, `id` → ориентация (`*9x16` → 1080×1920, `*16x9` → 1920×1080), `default_props.durationFrames` → `durationInFrames` |
+
+### Примеры
+
+**export const compositionConfig:**
+```tsx
+// Нет пропсов — всё берётся из кода
+<PlayerSandbox config={{ code: `
+  export const compositionConfig = {
+    id: 'Reel',
+    durationInFrames: 240,
+    fps: 60,
+    width: 1080,
+    height: 1920,
+    defaultProps: { title: 'Привет', color: '#fff' },
+  };
+  export default function Scene({ title }: any) { return <div>{title}</div>; }
+` }} />
+```
+
+**Отдельные export const:**
+```tsx
+<PlayerSandbox config={{ code: `
+  export const durationInFrames = 90;
+  export const fps = 24;
+  export const width = 1280;
+  export const height = 720;
+  export default function Scene() { return <div>Scene</div>; }
+` }} />
+```
+
+**Статические поля компонента:**
+```tsx
+<PlayerSandbox config={{ code: `
+  export default function Scene() { return <div>Scene</div>; }
+  Scene.durationInFrames = 150;
+  Scene.fps = 25;
+  Scene.width = 480;
+  Scene.height = 854;
+` }} />
+```
+
+**Regex fallback — `<Composition>` в строке:**
+```tsx
+<PlayerSandbox config={{ code: `
+  const template = '<Composition id="Tag" durationInFrames={99} fps={12} width={640} height={360} />';
+  export default function Scene() { return <div>Scene</div>; }
+` }} />
+```
+
+**JSON / Vidora-каталог:**
+```tsx
+<PlayerSandbox config={{
+  files: {
+    '/widgets.json': JSON.stringify({
+      widgets: [{
+        id: 'WordByWordText9x16',      // 9x16 → 1080×1920
+        default_props: {
+          durationFrames: 300,
+          title: 'Заголовок',
+        },
+      }],
+    }),
+    '/App.tsx': 'export default function Scene() { return <div />; }',
+  },
+  entry: '/App.tsx',
+}} />
+```
+
+### Доступ к метаданным из кода
+
+```ts
+import { extractSceneMetadata } from 'browser-tsx-sandbox';
+
+const metadata = extractSceneMetadata(codeString, evaluatedExports, Component);
+// metadata.durationInFrames, metadata.fps, metadata.width, metadata.height, metadata.defaultProps
+```
+
+### Дефолтные значения (когда извлечь нечего)
+
+| Параметр | Дефолт |
+|---|---|
+| `durationInFrames` | `300` |
+| `fps` | `30` |
+| `width` | `1920` |
+| `height` | `1080` |
+
+---
+
+## 20. Тестирование и сборка
 
 | Скрипт | Действие |
 |---|---|
@@ -969,7 +1118,21 @@ function isSandboxPassthroughError(error: unknown): boolean;
 
 ---
 
-## 20. История версий
+## 21. История версий
+
+### v0.8.0
+- **Scene Metadata:** автоматическое извлечение `durationInFrames`/`fps`/`width`/`height`/`defaultProps` из
+  `compositionConfig`/`config`/`sceneConfig`/`metadata` экспортов, статики компонента, `<Composition>` в коде и JSON (прямой + Vidora `widgets[]`). Deafults для JSON-сцен: 300 кадров, 30 fps, 1080×1920. `<PlayerSandbox>` применяет metadata-фолбэки если пропсы не указаны.
+
+### v0.7.0
+- **Чистый кадр для вертикальных платформ:** снимок/экспорт пишут только композицию
+  (`data-remotion-canvas`, точный 1:1 без UI-масштаба); safe-zone оверлеи, `<audio>/<video>`
+  вырезаются из кадра, CSS страницы инъектируется в `foreignObject`.
+- **Safe zones:** `SafeZonesOverlay` пересчитан в сетке 1080×1920 с реальной геометрией
+  TikTok/Reels/Shorts/TV-safe/правила третей/креста.
+- **Программный экспорт:** `ExportVideoOptions.width/height/fps/onProgress`,
+  `PlayerSandboxRef.getExportState()`, `PlayerContextValue.getExportState()`.
+- **Логгер:** `configureLogger`/`logger` для плеера, снимка и экспорта (по умолчанию выкл).
 
 ### v0.6.0
 - **Плеер:** стабильный `SafeComponent` (без ре-маунта `<Player />`), явные `width/height: 100%` для контейнера и плеера, headless-UI не размонтируется при компиляции/ошибках.

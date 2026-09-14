@@ -75,3 +75,178 @@ describe('react/PlayerSandbox (live preview через Remotion Player)', () => 
     expect(await screen.findByText(/\[Compiler Error\]/)).toBeTruthy();
   });
 });
+
+describe('react/PlayerSandbox: автоопределение параметров сцены (только код/JSON, без пропсов)', () => {
+  const videoConfigProbe = (params: string) => `
+    import { useVideoConfig, useCurrentFrame } from 'remotion';
+    ${params}
+    export default function Scene({ title = 'none', marker = 'x' }: any) {
+      const { width, height, fps, durationInFrames } = useVideoConfig();
+      const frame = useCurrentFrame();
+      return <span>{width}x{height}@{durationInFrames}fps{fps} title:{title} mark:{marker} frame:{frame}</span>;
+    }
+  `;
+
+  it('вариант 1: export const compositionConfig — кадр получает 1080×1920@240fps60 и defaultProps', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          code: videoConfigProbe(`
+            export const compositionConfig = {
+              id: 'ReelA',
+              durationInFrames: 240,
+              fps: 60,
+              width: 1080,
+              height: 1920,
+              defaultProps: { title: 'Привет', marker: 'cfg' },
+            };
+          `),
+          modules: { remotion: Remotion },
+          controls: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('1080x1920@240fps60 title:Привет mark:cfg frame:0')).toBeTruthy();
+  });
+
+  it('вариант 2: отдельные export const durationInFrames/fps/width/height', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          code: videoConfigProbe(`
+            export const durationInFrames = 90;
+            export const fps = 24;
+            export const width = 1280;
+            export const height = 720;
+          `),
+          modules: { remotion: Remotion },
+          controls: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('1280x720@90fps24 title:none mark:x frame:0')).toBeTruthy();
+  });
+
+  it('вариант 3: статические поля Scene.durationInFrames/width/height/fps', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          code: `
+            import { useVideoConfig } from 'remotion';
+            export default function Scene() {
+              const { width, height, fps, durationInFrames } = useVideoConfig();
+              return <span>static:{width}x{height}@{durationInFrames}fps{fps}</span>;
+            }
+            Scene.durationInFrames = 150;
+            Scene.fps = 25;
+            Scene.width = 480;
+            Scene.height = 854;
+          `,
+          modules: { remotion: Remotion },
+          controls: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('static:480x854@150fps25')).toBeTruthy();
+  });
+
+  it('вариант 4: компонентные static defaultProps — inputProps доходят до анимации', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          code: `
+            import { useVideoConfig } from 'remotion';
+            export default function Scene({ title = 'none' }: any) {
+              const { durationInFrames } = useVideoConfig();
+              return <span>{durationInFrames}fps-title:{title}</span>;
+            }
+            Scene.defaultProps = { title: 'StaticProps' };
+          `,
+          modules: { remotion: Remotion },
+          controls: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('300fps-title:StaticProps')).toBeTruthy();
+  });
+
+  it('вариант 5: JSX-декларация <Composition durationInFrames={99} .../> в тексте кода', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          code: `
+            import { useVideoConfig } from 'remotion';
+            const template = '<Composition id="Tag" durationInFrames={99} fps={12} width={640} height={360} />';
+            export default function Scene() {
+              const { width, height, fps, durationInFrames } = useVideoConfig();
+              return <span>tag:{width}x{height}@{durationInFrames}fps{fps}</span>;
+            }
+          `,
+          modules: { remotion: Remotion },
+          controls: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('tag:640x360@99fps12')).toBeTruthy();
+  });
+
+  it('вариант 6: Vidora-каталог widgets.json в VFS — 9x16 → 1080×1920 и default_props в пропсы', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          files: {
+            '/widget.json': JSON.stringify({
+              vidora_schema_version: '1.0',
+              widgets: [
+                {
+                  id: 'WordByWordText9x16',
+                  default_props: {
+                    durationFrames: 300,
+                    title: 'Видор',
+                    marker: 'v',
+                  },
+                },
+              ],
+            }),
+            '/App.tsx': videoConfigProbe(''),
+          },
+          entry: '/App.tsx',
+          modules: { remotion: Remotion },
+          controls: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('1080x1920@300fps30 title:Видор mark:v frame:0')).toBeTruthy();
+  });
+
+  it('вариант 7: явные пропсы config переопределяют метаданные сцены', async () => {
+    render(
+      <PlayerSandbox
+        config={{
+          code: videoConfigProbe(`
+            export const compositionConfig = {
+              durationInFrames: 240,
+              fps: 60,
+              width: 1080,
+              height: 1920,
+            };
+          `),
+          modules: { remotion: Remotion },
+          controls: false,
+          durationInFrames: 10,
+          fps: 30,
+          width: 640,
+          height: 360,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('640x360@10fps30 title:none mark:x frame:0')).toBeTruthy();
+  });
+});

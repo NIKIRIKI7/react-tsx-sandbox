@@ -36,6 +36,7 @@ function createContextValue(overrides: Partial<PlayerContextValue> = {}): Player
     resetZoomPan: vi.fn(),
     takeSnapshot: vi.fn(async () => 'data:'),
     exportState: { isExporting: false, progress: null, phase: null, error: null },
+    getExportState: () => ({ isExporting: false, progress: null, phase: null, error: null }),
     exportVideo: vi.fn(async () => null),
     abortExport: vi.fn(),
     ...overrides,

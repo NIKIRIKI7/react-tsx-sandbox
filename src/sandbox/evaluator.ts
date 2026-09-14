@@ -109,5 +109,15 @@ export function executeComponent(
     throw new Error(`Точка входа "${entryPath}" не найдена в виртуальной файловой системе.`);
   }
 
-  return pickExport(evaluateFile(entryPath, rootCode));
+  const rootExports = evaluateFile(entryPath, rootCode);
+  const component = pickExport(rootExports);
+
+  // Сохраняем вычисленные экспорты для последующего извлечения метаданных
+  if (component && (typeof component === 'function' || typeof component === 'object')) {
+    try {
+      (component as any).__moduleExports = rootExports;
+    } catch {}
+  }
+
+  return component;
 }

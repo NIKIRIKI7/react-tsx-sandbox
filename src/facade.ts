@@ -20,6 +20,7 @@ import { buildImportsGraph, getDependents } from './core/hmr';
 import { ModuleCache } from './library-manager/cache';
 import { loadMissingModules, ModuleImporter } from './library-manager/loader';
 import { executeComponent } from './sandbox/evaluator';
+import { extractSceneMetadata } from './core/scene-metadata';
 
 export interface SandboxFacadeOptions {
   compiler?: CompilerAdapter;
@@ -28,6 +29,11 @@ export interface SandboxFacadeOptions {
   loopProtect?: boolean;
   maxIterations?: number;
   plugins?: PipelinePlugin[];
+}
+
+/** Является ли файл компилируемым исходником (TS/TSX/JS/JSX). JSON и прочие ресурсы не компилируются. */
+function isCodeFile(filepath: string): boolean {
+  return /\.([cm]?[jt]sx?)$/.test(filepath);
 }
 
 export class SandboxFacade {
@@ -117,6 +123,8 @@ export class SandboxFacade {
       const processed: VirtualFileSystem = {};
 
       for (const [filepath, rawCode] of Object.entries(vfs)) {
+        if (!isCodeFile(filepath)) continue;
+
         let code = await this.processCode(rawCode, filepath);
 
         processed[filepath] = code;
@@ -149,10 +157,15 @@ export class SandboxFacade {
         entryPath: entry,
       });
 
+      const rootExports = (component as any)?.__moduleExports;
+      const metadata = extractSceneMetadata(input, rootExports, component);
+
       return {
         component,
         error: null,
         executionTimeMs: performance.now() - start,
+        metadata,
+        exports: rootExports,
       };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -161,6 +174,8 @@ export class SandboxFacade {
         error: err,
         executionTimeMs: performance.now() - start,
         errorPhase: getErrorPhase(err),
+        // JSON-сцена может не компилироваться как TSX — но её параметры всё равно извлекаем
+        metadata: extractSceneMetadata(input),
       };
     }
   }
@@ -197,6 +212,8 @@ export class SandboxFacade {
         const bareImports = new Set<string>();
 
         for (const [filepath, rawCode] of Object.entries(vfs)) {
+          if (!isCodeFile(filepath)) continue;
+
           const code = await this.processCode(rawCode, filepath);
           processed[filepath] = code;
           compiledVfs[filepath] = await this.transformCode(code, filepath);
@@ -220,7 +237,10 @@ export class SandboxFacade {
 
         this.hmrState = { lastVfs: vfs, processed, compiled: compiledVfs };
 
-        return { component, error: null, executionTimeMs: performance.now() - start, hmr };
+        const rootExports1 = (component as any)?.__moduleExports;
+        const metadata1 = extractSceneMetadata(vfs, rootExports1, component);
+
+        return { component, error: null, executionTimeMs: performance.now() - start, hmr, metadata: metadata1, exports: rootExports1 };
       }
 
       // Инкрементальный путь: дифф + граф зависимостей
@@ -248,7 +268,10 @@ export class SandboxFacade {
       
       const affected = getDependents([...changedSet, ...hmr.removed], nextGraph);
       const recompileSet = new Set(
-        affected.filter((filepath) => Object.prototype.hasOwnProperty.call(vfs, filepath)),
+        affected.filter(
+          (filepath) =>
+            isCodeFile(filepath) && Object.prototype.hasOwnProperty.call(vfs, filepath),
+        ),
       );
 
       hmr.recompiled = [...recompileSet];
@@ -287,7 +310,10 @@ export class SandboxFacade {
 
       this.hmrState = { lastVfs: vfs, processed, compiled: compiledVfs };
 
-      return { component, error: null, executionTimeMs: performance.now() - start, hmr };
+      const rootExports2 = (component as any)?.__moduleExports;
+      const metadata2 = extractSceneMetadata(vfs, rootExports2, component);
+
+      return { component, error: null, executionTimeMs: performance.now() - start, hmr, metadata: metadata2, exports: rootExports2 };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       return {
@@ -296,6 +322,7 @@ export class SandboxFacade {
         executionTimeMs: performance.now() - start,
         errorPhase: getErrorPhase(err),
         hmr,
+        metadata: extractSceneMetadata(vfs),
       };
     }
   }

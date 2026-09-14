@@ -264,9 +264,13 @@ export default function Scene() {
 | Типы для Monaco/CodeMirror | `getSandboxTypeDefinitions` |
 | ZIP-ассеты | `extractAssetZip`, `createAssetUrlMap`, `releaseAssetUrls` |
 
-### Надёжность плеера (v0.4.0)
+### Надёжность плеера (v0.4.0+)
 
 - **Smart Frame Retention** — при перекомпиляции сохраняются кадр и play (`smartFrameRetention`).
+- **Чистый кадр для TikTok/Reels/Shorts** — `takeSnapshot` и `exportVideo` снимают
+  **только композицию** (`data-remotion-canvas`): safe-zone оверлеи, `<audio>/<video>`
+  вырезаются из кадра, CSS страницы инъектируется в `foreignObject`, а размер
+  принудительно приводится к `config.width × config.height` (точный 1:1).
 - **Императивный API** — `PlayerSandboxRef`: `seekTo`, `getCurrentFrame`, `play/pause/toggle`, `takeSnapshot`, `exportVideo`, `abortExport`, `resetZoomPan`, `getActiveDelayHandles`, `getRemotionPlayerRef`.
 - **delayRender Watchdog** — снимает зависшую блокировку кадра (`createRemotionWatchdog`).
 - **WebGL Guard** — освобождает контексты при размонтировании (`cleanupCanvasWebGl`).

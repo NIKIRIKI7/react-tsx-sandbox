@@ -13,6 +13,10 @@ export interface EvaluationResult<T = any> {
   error: Error | null;
   executionTimeMs: number;
   errorPhase?: import('./errors').ErrorPhase;
+  /** Автоматически извлечённые параметры сцены (разрешение, FPS, пропсы и т.д.). */
+  metadata?: import('./scene-metadata').SceneMetadata;
+  /** Сырые экспорты корневого модуля (для ручного доступа к compositionConfig и т.п.). */
+  exports?: Record<string, any>;
 }
 
 /** Сводка HMR-обновления: какие файлы изменились, а какие переиспользованы. */

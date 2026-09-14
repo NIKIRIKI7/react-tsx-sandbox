@@ -3,10 +3,12 @@ import { SandboxFacade, SandboxFacadeOptions } from '../facade';
 import { HmrEvent, ModuleRegistry, VirtualFileSystem } from '../core/types';
 import { RuntimeRenderError } from '../core/errors';
 import * as React from 'react';
+import type { SceneMetadata } from '../core/scene-metadata';
 
 export interface CompiledComponentInfo {
   component: React.ComponentType<any>;
   executionTimeMs: number;
+  metadata?: SceneMetadata;
 }
 
 export interface UseLiveSandboxOptions extends SandboxFacadeOptions {
@@ -30,6 +32,8 @@ export interface UseLiveSandboxResult {
   setRuntimeError: (error: RuntimeRenderError | Error | null) => void;
   /** Сводка последнего HMR-обновления (когда включён `hmr`). */
   lastHmr?: HmrEvent | null;
+  /** Автоматически извлечённые параметры сцены. */
+  metadata?: SceneMetadata;
 }
 
 /**
@@ -65,6 +69,7 @@ export function useLiveSandbox(
   const [runtimeError, setRuntimeError] = useState<RuntimeRenderError | Error | null>(null);
   const [isCompiling, setIsCompiling] = useState(true);
   const [lastHmr, setLastHmr] = useState<HmrEvent | null>(null);
+  const [metadata, setMetadata] = useState<SceneMetadata | undefined>(undefined);
 
   const inputKey = typeof codeOrFiles === 'string' ? codeOrFiles : JSON.stringify(codeOrFiles);
   const assetsKey = JSON.stringify(localAssets ?? {});
@@ -79,17 +84,20 @@ export function useLiveSandbox(
     setIsCompiling(true);
     setRuntimeError(null);
 
-    const derive = (result: { component: any; error: Error | null; executionTimeMs: number }) => {
+    const derive = (result: { component: any; error: Error | null; executionTimeMs: number; metadata?: SceneMetadata }) => {
       if (result.error) {
         setError(result.error);
         setComponent(null);
+        setMetadata(undefined);
         optionsRef.current.onError?.(result.error);
       } else if (result.component) {
         setError(null);
         setComponent(() => result.component);
+        setMetadata(result.metadata);
         optionsRef.current.onCompiled?.({
           component: result.component,
           executionTimeMs: result.executionTimeMs,
+          metadata: result.metadata,
         });
       }
     };
@@ -115,6 +123,7 @@ export function useLiveSandbox(
           const normalized = err instanceof Error ? err : new Error(String(err));
           setError(normalized);
           setComponent(null);
+          setMetadata(undefined);
           optionsRef.current.onError?.(normalized);
         })
         .finally(() => {
@@ -130,5 +139,5 @@ export function useLiveSandbox(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputKey, assetsKey, debounceMs]);
 
-  return { Component, error, isCompiling, runtimeError, setRuntimeError, lastHmr };
+  return { Component, error, isCompiling, runtimeError, setRuntimeError, lastHmr, metadata };
 }
