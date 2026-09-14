@@ -234,6 +234,7 @@ interface SandboxConfig extends UseLiveSandboxOptions {
   files?: VirtualFileSystem;
   modules?: ModuleRegistry;
   assets?: Record<string, string>;
+  mediaResolver?: (src: string) => string;
   className?: string;
   style?: React.CSSProperties;
   wrapper?: React.ComponentType<{ children: React.ReactNode }>;
@@ -259,6 +260,61 @@ interface SandboxErrorContext extends SandboxRenderContext {
 - `code` и `files` взаимоисключающие; `files` имеет приоритет.
 - Ошибки рендера ловит встроенный [`SandboxErrorBoundary`](#151-sandboxerrorboundary).
 - Если заданы `className`/`style`, контент оборачивается в `<div data-tsx-sandbox>`.
+
+### 5.1 `mediaResolver` — перехват медиа-ассетов без правки кода сцены
+
+Иногда код сцены содержит прямые локальные пути (например `C:\Users\...\clip.mp4`), а
+браузер блокирует их загрузку («Not allowed to load local resource»). `mediaResolver`
+прозрачно оборачивает медиа-компоненты Remotion (`OffthreadVideo`, `Video`, `Audio`,
+`Img`) из переданного модуля `remotion` и при каждом рендере подменяет их проп `src`
+результатом вызова; сам исходный код сцены не меняется.
+
+| Поле | Тип | По умолчанию |
+|---|---|---|
+| `mediaResolver` | `(src: string) => string` | — (патч не применяется) |
+
+**Пример А — локальная разработка через Vite** (отдаём файлы прямо с диска через
+`/@fs/`; в `demo/vite.config.ts` должен быть задан `server: { fs: { strict: false } }`):
+
+```tsx
+<PlayerSandbox
+  config={{
+    code: sceneCode,
+    modules: { remotion: Remotion },
+    mediaResolver: (src) => {
+      const clean = src.replace(/^file:\/\/\//i, '');
+      if (/^[a-zA-Z]:[\\/]/.test(clean)) {
+        return '/@fs/' + clean.replace(/\\/g, '/');
+      }
+      return src;
+    },
+  }}
+/>
+```
+
+**Пример Б — файлы из ZIP/памяти браузера** (в коде сцены остаются абсолютные пути,
+а в рантайме берутся blob-ссылки из `assets`):
+
+```tsx
+const zipAssets = {
+  'clip_0000_0004.mp4': 'blob:http://localhost/...',
+};
+
+<PlayerSandbox
+  config={{
+    code: userCode,
+    assets: zipAssets,
+    mediaResolver: (src) => {
+      const filename = src.split(/[\\/]/).pop()!;
+      return zipAssets[filename] ?? src;
+    },
+  }}
+/>
+```
+
+Работает во всех UI-компонентах (`<Sandbox>`, `<PlayerSandbox>`), т.к. поле объявлено
+в общем `SandboxConfig`. Другие экспорты модуля `remotion` (хелперы, хуки, константы)
+обёртка не затрагивает; рефы пробрасываются через `forwardRef`.
 
 ---
 
@@ -302,6 +358,8 @@ interface CanvasControlsConfig {
   initialZoom?: number; // 1
 }
 ```
+
+В `PlayerSandboxConfig` доступны и все поля `SandboxConfig`, включая `mediaResolver` (см. [5.1](#51-mediarresolver--перехват-медиа-ассетов-без-правки-кода-сцены)) — для сцен с локальными путями к медиа.
 
 ### 6.2 `PlayerSandboxRef`
 
@@ -565,6 +623,8 @@ const [cues, setCues] = useState<Cue[]>([]);
 ---
 
 ## 9. Компилятор
+
+> 📖 Практический гайд по плагинам (Tailwind JIT + свои расширения) — [`docs/plugins.md`](./docs/plugins.md).
 
 ### 9.1 `compileTsx`
 

@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import * as Remotion from 'remotion';
 import { Camera, Download, Pause, Play, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import * as Lucide from 'lucide-react';
 import { PlayerSandbox } from '../src/player';
 import type { PlayerSandboxRef } from '../src/player';
+import { createTailwindJitPlugin } from '../src/plugins/tailwind-plugin';
 import type { BrowserExportCodec, ExportQuality } from '../src/export/browser-export';
 import { configureLogger } from '../src/core/logger';
 import './styles.css';
@@ -11,6 +13,7 @@ import './styles.css';
 const STUDIO_CODE = [
   "import React from 'react';",
   "import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';",
+  "import { Zap } from 'lucide-react';",
   '',
   'export default function Reel() {',
   '  const frame = useCurrentFrame();',
@@ -23,6 +26,7 @@ const STUDIO_CODE = [
   "      <div style={{ transform: `translateX(${x}px) scale(${enter})`, fontSize: 64, fontWeight: 900 }}>",
   '        FRAME {frame}',
   '      </div>',
+  "      <Zap size={44} color='#ddb7ff' fill='#ddb7ff' style={{ position: 'absolute', top: 48 }} />",
   "      <div style={{ position: 'absolute', bottom: 80, color: '#ddb7ff', fontFamily: 'monospace' }}>",
   '        TikTok safe zone overlay',
   '      </div>',
@@ -52,6 +56,18 @@ export function StudioExample() {
   const [status, setStatus] = useState('ready');
   const [quality, setQuality] = useState<ExportQuality>('high');
   const [codec, setCodec] = useState<BrowserExportCodec>('avc');
+
+  const toViteFsPath = (src: string): string => {
+    const clean = src.replace(/^file:\/\/\//i, '');
+    if (/^[a-zA-Z]:[\\/]/.test(clean)) {
+      return '/@fs/' + clean.replace(/\\/g, '/');
+    }
+    return src;
+  };
+
+  const plugins = useMemo(() => [createTailwindJitPlugin()], []);
+
+  const modules = useMemo(() => ({ remotion: Remotion, 'lucide-react': Lucide }), []);
 
   useEffect(() => {
     configureLogger({ enabled: true });
@@ -107,7 +123,9 @@ export function StudioExample() {
             ref={playerRef}
             config={{
               code: STUDIO_CODE,
-              modules: { remotion: Remotion },
+              modules: modules,
+              plugins,
+              mediaResolver: toViteFsPath,
               durationInFrames: 150,
               fps: 30,
               width: 1080,
