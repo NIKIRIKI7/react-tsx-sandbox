@@ -5,6 +5,13 @@ const page = (name: string) => fileURLToPath(new URL(`./${name}`, import.meta.ur
 
 // Multi-page demo: index.html (Player) + studio.html (Studio).
 export default defineConfig({
+  server: {
+    fs: {
+      // Разрешить Vite отдавать локальные файлы по абсолютному пути (`/@fs/C:/...`),
+      // чтобы медиа-сцены с путями `C:\...` работали без блокировки браузера.
+      strict: false,
+    },
+  },
   build: {
     rollupOptions: {
       input: {

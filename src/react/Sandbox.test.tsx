@@ -43,6 +43,33 @@ describe('react/Sandbox (UI-компонент)', () => {
     expect(await screen.findByText('blob:logo')).toBeTruthy();
   });
 
+  it('применяет mediaResolver к src медиа-компонентов Remotion', async () => {
+    const FakeRemotion = {
+      Video: (props: any) => <span data-testid="sandbox-video" data-src={props.src} />,
+      delayRender: () => 1,
+    };
+
+    render(
+      <Sandbox
+        config={{
+          code: `
+            import { Video } from 'remotion';
+            export default function C(){ return <Video src="C:/Users/a/b.mp4" />; }
+          `,
+          modules: { remotion: FakeRemotion as any },
+          mediaResolver: (src) => {
+            const clean = src.replace(/^file:\/\/\//i, '').replace(/\\/g, '/');
+            if (/^[a-zA-Z]:[\\/]/.test(clean)) return '/@fs/' + clean;
+            return src;
+          },
+        }}
+      />,
+    );
+
+    const el = await screen.findByTestId('sandbox-video');
+    expect(el.getAttribute('data-src')).toBe('/@fs/C:/Users/a/b.mp4');
+  });
+
   it('использует кастомный importer для внешних пакетов', async () => {
     const importer = vi.fn(async () => ({ default: () => 'from-cdn' }));
 

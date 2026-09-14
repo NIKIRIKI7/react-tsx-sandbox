@@ -12,6 +12,7 @@ import type { PlayerPropsWithoutZod, PlayerRef } from '@remotion/player';
 import { SandboxConfig, SandboxRenderContext } from './Sandbox';
 import { SandboxErrorBoundary } from './ErrorBoundary';
 import { useLiveSandbox } from './useLiveSandbox';
+import { applyMediaResolver } from './media-resolver';
 import { createRemotionWatchdog } from '../sandbox/watchdog';
 import { cleanupCanvasWebGl } from '../sandbox/webgl-guard';
 import { takeContainerSnapshot } from '../sandbox/snapshot';
@@ -121,8 +122,12 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
 
     const proxiedModules = useMemo(() => {
       if (!config.modules?.remotion) return config.modules ?? {};
-      return { ...config.modules, remotion: proxiedRemotion };
-    }, [config.modules, proxiedRemotion]);
+      let remotion: any = proxiedRemotion;
+      if (config.mediaResolver) {
+        remotion = applyMediaResolver(remotion, config.mediaResolver);
+      }
+      return { ...config.modules, remotion };
+    }, [config.modules, proxiedRemotion, config.mediaResolver]);
 
     const { Component, error, isCompiling, runtimeError, setRuntimeError, metadata } = useLiveSandbox(
       input,

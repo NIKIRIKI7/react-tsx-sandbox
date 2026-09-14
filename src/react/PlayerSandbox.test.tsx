@@ -74,6 +74,37 @@ describe('react/PlayerSandbox (live preview через Remotion Player)', () => 
 
     expect(await screen.findByText(/\[Compiler Error\]/)).toBeTruthy();
   });
+
+  it('применяет mediaResolver к src медиа-компонентов Remotion (через публичный конфиг)', async () => {
+    const FakeRemotion = {
+      OffthreadVideo: (props: any) => <span data-testid="ot-video" data-src={props.src} />,
+      delayRender: () => 1,
+      continueRender: () => undefined,
+    };
+
+    render(
+      <PlayerSandbox
+        config={{
+          code: `
+            import { OffthreadVideo } from 'remotion';
+            export default function C(){ return <OffthreadVideo src="C:/Users/test/clip.mp4" />; }
+          `,
+          modules: { remotion: FakeRemotion as any },
+          controls: false,
+          fps: 30,
+          durationInFrames: 60,
+          mediaResolver: (src) => {
+            const clean = src.replace(/^file:\/\/\//i, '').replace(/\\/g, '/');
+            if (/^[a-zA-Z]:[\\/]/.test(clean)) return '/@fs/' + clean;
+            return src;
+          },
+        }}
+      />,
+    );
+
+    const el = await screen.findByTestId('ot-video');
+    expect(el.getAttribute('data-src')).toBe('/@fs/C:/Users/test/clip.mp4');
+  });
 });
 
 describe('react/PlayerSandbox: автоопределение параметров сцены (только код/JSON, без пропсов)', () => {

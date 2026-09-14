@@ -2,6 +2,7 @@ import React from 'react';
 import { ModuleRegistry, VirtualFileSystem } from '../core/types';
 import { SandboxErrorBoundary } from './ErrorBoundary';
 import { useLiveSandbox, UseLiveSandboxOptions } from './useLiveSandbox';
+import { applyMediaResolver } from './media-resolver';
 
 export interface SandboxRenderContext {
   Component: React.ComponentType<any> | null;
@@ -23,6 +24,9 @@ export interface SandboxConfig extends UseLiveSandboxOptions {
   modules?: ModuleRegistry;
   /** Карта ассетов имя -> URL (blob:/data:/http) для staticFile(...). */
   assets?: Record<string, string>;
+  /** Преобразует `src` медиа-компонентов Remotion (OffthreadVideo/Video/Audio/Img)
+   *  перед рендером, не меняя код сцены (например, локальные пути `C:\...` -> blob//@fs/). */
+  mediaResolver?: (src: string) => string;
   className?: string;
   style?: React.CSSProperties;
   wrapper?: React.ComponentType<{ children: React.ReactNode }>;
@@ -52,9 +56,16 @@ const defaultErrorStyle: React.CSSProperties = {
 export const Sandbox: React.FC<SandboxProps> = ({ config }) => {
   const input: string | VirtualFileSystem = config.files ?? config.code ?? '';
 
+  // Применяем mediaResolver к модулю remotion, не трогая код сцены.
+  const resolvedModules: ModuleRegistry = React.useMemo(() => {
+    const base = config.modules ?? {};
+    if (!config.mediaResolver || !base.remotion) return base;
+    return { ...base, remotion: applyMediaResolver(base.remotion, config.mediaResolver) };
+  }, [config.modules, config.mediaResolver]);
+
   const { Component, error, isCompiling, runtimeError, setRuntimeError } = useLiveSandbox(
     input,
-    config.modules ?? {},
+    resolvedModules,
     config.assets ?? {},
     config,
   );
