@@ -13,7 +13,6 @@ describe('core/hmr.diffFiles', () => {
       '/utils.ts': 'export const a = 1;',
       '/theme.ts': 'export const theme = "dark";',
     };
-
     const { changed, removed } = diffFiles(oldFiles, newFiles);
 
     expect(changed.sort()).toEqual(['/App.tsx', '/theme.ts']);
@@ -23,7 +22,6 @@ describe('core/hmr.diffFiles', () => {
   it('reports removed files', () => {
     const oldFiles: VirtualFileSystem = { '/App.tsx': 'x', '/gone.ts': 'y' };
     const newFiles: VirtualFileSystem = { '/App.tsx': 'x' };
-
     const { changed, removed } = diffFiles(oldFiles, newFiles);
 
     expect(changed).toEqual([]);
@@ -33,7 +31,6 @@ describe('core/hmr.diffFiles', () => {
   it('ignores files that only change by equality of content', () => {
     const oldFiles: VirtualFileSystem = { '/App.tsx': 'same' };
     const newFiles: VirtualFileSystem = { '/App.tsx': 'same' };
-
     const { changed, removed } = diffFiles(oldFiles, newFiles);
 
     expect(changed).toEqual([]);
@@ -49,7 +46,19 @@ describe('core/hmr.buildImportsGraph', () => {
       '/host.tsx': "import App from './App'",
     };
 
-    const graph = buildImportsGraph(vfs);
+    const getLocalImports = (code: string) => {
+      if (code.includes('./helper')) return ['./helper'];
+      if (code.includes('./App')) return ['./App'];
+      return [];
+    };
+
+    const resolvePath = (curr: string, rel: string) => {
+      if (curr === '/App.tsx' && rel === './helper') return '/helper.ts';
+      if (curr === '/host.tsx' && rel === './App') return '/App.tsx';
+      return null;
+    };
+
+    const graph = buildImportsGraph(vfs, getLocalImports, resolvePath);
 
     expect(graph['/App.tsx']).toEqual(['/helper.ts']);
     expect(graph['/host.tsx']).toEqual(['/App.tsx']);
@@ -59,9 +68,10 @@ describe('core/hmr.buildImportsGraph', () => {
 
   it('treats a module importing itself as no dependency', () => {
     const vfs: VirtualFileSystem = { '/self.ts': "import { x } from './self';" };
-
-    const graph = buildImportsGraph(vfs);
-
+    const getLocalImports = () => ['./self'];
+    const resolvePath = () => '/self.ts';
+    
+    const graph = buildImportsGraph(vfs, getLocalImports, resolvePath);
     expect(graph['/self.ts']).toEqual([]);
   });
 });
@@ -76,22 +86,17 @@ describe('core/hmr.getDependents', () => {
     };
 
     const dependents = getDependents(['/leaf.ts'], graph);
-
     expect(dependents.sort()).toEqual(['/leaf.ts', '/middle.ts', '/top.ts']);
   });
 
   it('returns seeds even when nothing depends on them', () => {
     const graph = { '/leaf.ts': [], '/other.ts': [] };
-
     expect(getDependents(['/leaf.ts'], graph)).toEqual(['/leaf.ts']);
   });
 
   it('finds importers of a removed module through its bogus edge', () => {
-    // '/gone.ts' отсутствует в новом графе, но '/App.tsx' всё ещё ссылается на него.
     const graph = { '/App.tsx': ['/gone.ts'] };
-
     const dependents = getDependents(['/gone.ts'], graph);
-
     expect(dependents.sort()).toEqual(['/App.tsx', '/gone.ts']);
   });
 });

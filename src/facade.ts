@@ -13,7 +13,7 @@ import {
   VirtualFileSystem,
 } from './core/types';
 import { getErrorPhase } from './core/errors';
-import { extractBareImports } from './compiler/analyzer';
+import { extractBareImports, scanImports, resolveVfsPath } from './compiler/analyzer';
 import { injectLoopProtection } from './compiler/loop-protect';
 import { compileTsx } from './compiler/transform';
 import { buildImportsGraph, getDependents } from './core/hmr';
@@ -240,7 +240,12 @@ export class SandboxFacade {
 
       if (signal?.aborted) throw new DOMException('Compilation aborted', 'AbortError');
 
-      const nextGraph = buildImportsGraph(vfs);
+      const nextGraph = buildImportsGraph(
+        vfs,
+        (code) => scanImports(code).localImports,
+        resolveVfsPath
+      );
+      
       const affected = getDependents([...changedSet, ...hmr.removed], nextGraph);
       const recompileSet = new Set(
         affected.filter((filepath) => Object.prototype.hasOwnProperty.call(vfs, filepath)),
