@@ -3,6 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { Sandbox } from './Sandbox';
+import * as ReactHost from 'react';
+
+const reactDeps = `react@${ReactHost.version},react-dom@${ReactHost.version}`;
 
 describe('react/Sandbox (UI-компонент)', () => {
   it('компилирует и рендерит переданный TSX', async () => {
@@ -83,7 +86,7 @@ describe('react/Sandbox (UI-компонент)', () => {
     );
 
     expect(await screen.findByText('from-cdn')).toBeTruthy();
-    expect(importer).toHaveBeenCalledWith('https://esm.sh/my-lib', expect.anything());
+    expect(importer).toHaveBeenCalledWith(`https://esm.sh/my-lib?deps=${reactDeps}`, expect.anything());
   });
 
   it('показывает renderLoading до завершения компиляции', () => {

@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { loadMissingModules } from './loader';
 import { ModuleCache } from './cache';
 import { NetworkModuleError } from '../core/errors';
+import * as React from 'react';
+
+const reactDeps = `react@${React.version},react-dom@${React.version}`;
+const cdn = (pkg: string) => `https://esm.sh/${pkg}?deps=${reactDeps}`;
 
 describe('library-manager/loader.loadMissingModules', () => {
   it('fetches a missing package from esm.sh', async () => {
@@ -10,7 +14,7 @@ describe('library-manager/loader.loadMissingModules', () => {
 
     await loadMissingModules(['framer-motion'], cache, importer);
 
-    expect(importer).toHaveBeenCalledWith('https://esm.sh/framer-motion');
+    expect(importer).toHaveBeenCalledWith(cdn('framer-motion'));
     expect(cache.has('framer-motion')).toBe(true);
   });
 
@@ -51,8 +55,8 @@ describe('library-manager/loader.loadMissingModules', () => {
     await loadMissingModules(['a', 'b', 'c'], cache, importer);
 
     expect(importer).toHaveBeenCalledTimes(3);
-    expect(cache.getAll().a).toEqual({ default: 'https://esm.sh/a', __esModule: true });
-    expect(cache.getAll().c).toEqual({ default: 'https://esm.sh/c', __esModule: true });
+    expect(cache.getAll().a).toEqual({ default: cdn('a'), __esModule: true });
+    expect(cache.getAll().c).toEqual({ default: cdn('c'), __esModule: true });
   });
 
   it('wraps network failures into a NetworkModuleError with context', async () => {

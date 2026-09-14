@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { SandboxFacade } from './facade';
 import { CompilerError, NetworkModuleError } from './core/errors';
 import { ModuleImporter } from './library-manager/loader';
+import * as React from 'react';
+
+const reactDeps = `react@${React.version},react-dom@${React.version}`;
+const cdn = (pkg: string) => `https://esm.sh/${pkg}?deps=${reactDeps}`;
 
 function createFakeReact() {
   return {
@@ -67,7 +71,7 @@ describe('facade.SandboxFacade', () => {
       `import motion from 'framer-motion'; export default function C(){ return motion(); }`,
     );
 
-    expect(importer).toHaveBeenCalledWith('https://esm.sh/framer-motion');
+    expect(importer).toHaveBeenCalledWith(cdn('framer-motion'));
     expect(result.error).toBeNull();
     expect(result.component()).toBe('animated');
   });

@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { CdnResolver } from '../core/types';
 import { NetworkModuleError } from '../core/errors';
 import { ModuleCache } from './cache';
@@ -10,7 +11,12 @@ export interface LoadModulesOptions {
   signal?: AbortSignal;
 }
 
-export const defaultCdnResolver: CdnResolver = (pkg: string) => `https://esm.sh/${pkg}`;
+/**
+ * Собирает CDN-зависимости строго под версию React хоста,
+ * чтобы элементы библиотек не конфликтовали с реконсилером.
+ */
+export const defaultCdnResolver: CdnResolver = (pkg: string) =>
+  `https://esm.sh/${pkg}?deps=react@${React.version},react-dom@${React.version}`;
 
 export const defaultImporter: ModuleImporter = (url) =>
   (new Function('u', 'return import(u)') as (u: string) => Promise<any>)(url);
