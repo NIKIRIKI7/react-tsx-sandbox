@@ -19,6 +19,8 @@ import type { SnapshotOptions } from '../sandbox/snapshot';
 import { SafeZonesOverlay } from './guides/SafeZonesOverlay';
 import type { SafeZonePreset } from './guides/SafeZonesOverlay';
 import { PlayerContext, PlayerContextValue } from './headless/PlayerContext';
+import type { ExportState, ExportVideoOptions } from './headless/PlayerContext';
+import { downloadExportBlob, exportBrowserVideo } from '../export/browser-export';
 import {
   ExportButton,
   PlayPauseButton,
@@ -72,6 +74,9 @@ export interface PlayerSandboxRef {
   getActiveDelayHandles: () => string[];
   getRemotionPlayerRef: () => PlayerRef | null;
   resetZoomPan: () => void;
+  /** Программный экспорт видео (MP4/WebM). */
+  exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
+  abortExport: () => void;
 }
 
 const defaultErrorStyle: React.CSSProperties = {
@@ -96,6 +101,13 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
     const [volume, setVolumeState] = useState(1);
     const [zoom, setZoom] = useState(config.canvasControls?.initialZoom ?? 1);
     const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [exportState, setExportState] = useState<ExportState>({
+      isExporting: false,
+      progress: null,
+      phase: null,
+      error: null,
+    });
+    const abortExportRef = useRef<AbortController | null>(null);
 
     const isPanningRef = useRef(false);
     const startMouseRef = useRef({ x: 0, y: 0 });
@@ -257,6 +269,54 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       [],
     );
 
+    const abortExport = useCallback(() => {
+      abortExportRef.current?.abort();
+    }, []);
+
+    const exportVideo = useCallback(
+      async (options: ExportVideoOptions = {}): Promise<Blob | null> => {
+        const container = containerRef.current;
+        if (!container || (abortExportRef.current && !abortExportRef.current.signal.aborted)) return null;
+
+        const controller = new AbortController();
+        abortExportRef.current = controller;
+
+        setExportState({ isExporting: true, progress: 0, phase: 'capturing', error: null });
+
+        try {
+          const currentConfig = configRef.current;
+          const blob = await exportBrowserVideo({
+            container,
+            durationInFrames: currentConfig.durationInFrames ?? 300,
+            fps: currentConfig.fps ?? 30,
+            width: currentConfig.width ?? 1920,
+            height: currentConfig.height ?? 1080,
+            seekTo,
+            codec: options.codec ?? 'avc',
+            quality: options.quality ?? 'high',
+            bitrate: options.bitrate,
+            signal: controller.signal,
+            onProgress: (next) =>
+              setExportState({ isExporting: true, progress: next.progress, phase: next.phase, error: null }),
+          });
+
+          if (options.filename !== false) {
+            downloadExportBlob(blob, options.filename);
+          }
+
+          setExportState({ isExporting: false, progress: 1, phase: 'done', error: null });
+          return blob;
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          setExportState({ isExporting: false, progress: null, phase: null, error: err });
+          return null;
+        } finally {
+          abortExportRef.current = null;
+        }
+      },
+      [seekTo],
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -270,8 +330,10 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
         getActiveDelayHandles: () => getActiveHandles().map((handle) => handle.label ?? `handle_${handle.id}`),
         getRemotionPlayerRef: () => internalPlayerRef.current,
         resetZoomPan,
+        exportVideo,
+        abortExport,
       }),
-      [getActiveHandles, resetZoomPan, seekTo, play, pause, toggle, takeSnapshot],
+      [getActiveHandles, resetZoomPan, seekTo, play, pause, toggle, takeSnapshot, exportVideo, abortExport],
     );
 
     const activeError = runtimeError ?? error;
@@ -298,6 +360,9 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       setPan,
       resetZoomPan,
       takeSnapshot,
+      exportState,
+      exportVideo,
+      abortExport,
     }), [
       currentFrame,
       config.durationInFrames,
@@ -315,6 +380,9 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       toggleMute,
       resetZoomPan,
       takeSnapshot,
+      exportState,
+      exportVideo,
+      abortExport,
     ]);
 
     let contentNode: React.ReactNode;

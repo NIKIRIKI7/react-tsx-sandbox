@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import {
+  ExportButton,
   PlayPauseButton,
   PlayPauseButtonRenderProps,
   TimeDisplay,
@@ -10,6 +11,7 @@ import {
   VolumeControl,
 } from './Primitives';
 import { PlayerContext, PlayerContextValue } from './PlayerContext';
+import type { ExportState } from './PlayerContext';
 
 function createContextValue(overrides: Partial<PlayerContextValue> = {}): PlayerContextValue {
   return {
@@ -33,6 +35,9 @@ function createContextValue(overrides: Partial<PlayerContextValue> = {}): Player
     setPan: vi.fn(),
     resetZoomPan: vi.fn(),
     takeSnapshot: vi.fn(async () => 'data:'),
+    exportState: { isExporting: false, progress: null, phase: null, error: null },
+    exportVideo: vi.fn(async () => null),
+    abortExport: vi.fn(),
     ...overrides,
   };
 }
@@ -180,5 +185,103 @@ describe('Player Shared Primitives', () => {
 
     fireEvent.click(screen.getByTestId('typed-play'));
     expect(toggle).toHaveBeenCalledTimes(1);
+  });
+
+  function withWebCodecs(enabled: boolean) {
+    const globalObject = globalThis as { VideoEncoder?: unknown };
+    if (enabled) {
+      globalObject.VideoEncoder = class VideoEncoder {
+        static isConfigSupported = vi.fn();
+      };
+    } else {
+      delete globalObject.VideoEncoder;
+    }
+  }
+
+  it('ExportButton вызывает exportVideo из контекста с настройками', () => {
+    withWebCodecs(true);
+    try {
+      const exportVideo = vi.fn(async () => null);
+      renderWithContext(
+        <ExportButton filename="clip.mp4" codec="avc" quality="high" bitrate={2_500_000} />,
+        { exportVideo },
+      );
+
+      fireEvent.click(screen.getByTestId('player-export-button'));
+      expect(exportVideo).toHaveBeenCalledWith({
+        filename: 'clip.mp4',
+        codec: 'avc',
+        quality: 'high',
+        bitrate: 2_500_000,
+      });
+    } finally {
+      withWebCodecs(false);
+    }
+  });
+
+  it('ExportButton показывает прогресс экспорта из exportState', () => {
+    withWebCodecs(true);
+    try {
+      const exportState: ExportState = {
+        isExporting: true,
+        progress: 0.5,
+        phase: 'encoding',
+        error: null,
+      };
+      renderWithContext(<ExportButton />, { exportState });
+      expect(screen.getByTestId('player-export-button').textContent).toBe('50%');
+    } finally {
+      withWebCodecs(false);
+    }
+  });
+
+  it('ExportButton дизаблится без поддержки WebCodecs', () => {
+    withWebCodecs(false);
+    try {
+      const exportVideo = vi.fn(async () => null);
+      renderWithContext(<ExportButton filename="a.mp4" />, { exportVideo });
+
+      const button = screen.getByTestId('player-export-button') as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      fireEvent.click(button);
+      expect(exportVideo).not.toHaveBeenCalled();
+    } finally {
+      withWebCodecs(false);
+    }
+  });
+
+  it('ExportButton передаёт error и cancel в render prop', () => {
+    withWebCodecs(true);
+    try {
+      const abortExport = vi.fn();
+      const exportState: ExportState = {
+        isExporting: false,
+        progress: null,
+        phase: null,
+        error: new Error('boom'),
+      };
+      renderWithContext(
+        <ExportButton>
+          {({ error, cancel, exportVideo }) => (
+            <button
+              data-testid="custom-export"
+              data-error={error ?? ''}
+              onClick={() => {
+                cancel();
+                exportVideo();
+              }}
+            />
+          )}
+        </ExportButton>,
+        { exportState, abortExport },
+      );
+
+      const custom = screen.getByTestId('custom-export') as HTMLButtonElement;
+      expect(custom.dataset.error).toBe('boom');
+      fireEvent.click(custom);
+      expect(abortExport).toHaveBeenCalledTimes(1);
+    } finally {
+      withWebCodecs(false);
+    }
   });
 });

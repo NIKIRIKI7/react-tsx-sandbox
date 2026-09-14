@@ -315,13 +315,37 @@ interface PlayerSandboxRef {
   getActiveDelayHandles: () => string[];
   getRemotionPlayerRef: () => PlayerRef | null;
   resetZoomPan: () => void;
+  exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
+  abortExport: () => void;
 }
 ```
 
 ```tsx
 const png = await ref.current?.takeSnapshot({ format: 'image/png' });
 ref.current?.seekTo(142);
+
+const mp4 = await ref.current?.exportVideo({ filename: false, quality: 'high' });
+ref.current?.abortExport();
 ```
+
+### 6.5 Программный экспорт видео
+
+`exportVideo` рендерит плеер в MP4/WebM прямо в браузере (WebCodecs + mediabunny)
+и по умолчанию скачивает файл (`filename: false` — только вернуть `Blob`).
+
+Захват кадра идёт в **реальном разрешении композиции** (по `config.width/height`,
+без UI-масштаба), поэтому видео не размывается при апскейле для YouTube/Instagram.
+
+```ts
+interface ExportVideoOptions {
+  filename?: string | false; // false — вернуть Blob без загрузки
+  codec?: 'avc' | 'vp8' | 'vp9'; // 'avc' — MP4 (по умолчанию)
+  quality?: 'low' | 'medium' | 'high'; // 'high' (по умолчанию)
+  bitrate?: number; // бит/с; приоритетнее quality
+}
+```
+
+Прогресс и ошибки — в реактивном `exportState` из контекста плеера.
 
 ### 6.3 Headless-примитивы (compound)
 
@@ -367,6 +391,9 @@ interface PlayerContextValue {
   setPan: (pan: { x: number; y: number } | ((prev: { x: number; y: number }) => { x: number; y: number })) => void;
   resetZoomPan: () => void;
   takeSnapshot: (options?: SnapshotOptions) => Promise<string>;
+  exportState: ExportState;
+  exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
+  abortExport: () => void;
 }
 ```
 

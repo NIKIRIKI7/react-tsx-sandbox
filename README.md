@@ -267,7 +267,7 @@ export default function Scene() {
 ### Надёжность плеера (v0.4.0)
 
 - **Smart Frame Retention** — при перекомпиляции сохраняются кадр и play (`smartFrameRetention`).
-- **Императивный API** — `PlayerSandboxRef`: `seekTo`, `getCurrentFrame`, `play/pause/toggle`, `takeSnapshot`, `resetZoomPan`, `getActiveDelayHandles`, `getRemotionPlayerRef`.
+- **Императивный API** — `PlayerSandboxRef`: `seekTo`, `getCurrentFrame`, `play/pause/toggle`, `takeSnapshot`, `exportVideo`, `abortExport`, `resetZoomPan`, `getActiveDelayHandles`, `getRemotionPlayerRef`.
 - **delayRender Watchdog** — снимает зависшую блокировку кадра (`createRemotionWatchdog`).
 - **WebGL Guard** — освобождает контексты при размонтировании (`cleanupCanvasWebGl`).
 - **Snapshot** — PNG/JPEG текущего кадра прямо в браузере (`takeContainerSnapshot`).
@@ -350,7 +350,7 @@ import confetti from 'canvas-confetti';
 - **Безопасность.** Затенение глобалов (`window`, `document`, `fetch`…) — защита от случайного и вредоносного доступа, но исполнение идёт в том же JS-realm: это не изоляция уровня ОС. Не запускайте непроверенный код без собственного sandbox-контура.
 - **Сеть.** NPM-импорты и часть e2e требуют доступа к CDN. В Node нативные `https`-импорты не поддерживаются — тесты используют адаптер с `?bundle`.
 - **`takeSnapshot`** для canvas-сцен (WebGL/2D) даёт настоящий PNG/JPEG; для чисто DOM-сцен браузер может пометить canvas как *tainted* и вернётся SVG data-URL.
-- **Браузерный рендер в файл** — экспорт MP4 (H.264) и WebM (VP8/VP9) через WebCodecs + `mediabunny` (`ExportButton`, `exportBrowserVideo`). Полный MKV/AAC-рендер в файл — только офлайн (Node + Chrome).
+- **Браузерный рендер в файл** — экспорт MP4 (H.264) и WebM (VP8/VP9) через WebCodecs + `mediabunny` (`ExportButton`, `exportBrowserVideo`, `PlayerSandbox` `exportVideo`). Захват кадра идёт в **разрешении композиции** (без UI-масштаба) — видео не размывается; пресеты качества `low`/`medium`/`high`. Полный MKV/AAC-рендер в файл — только офлайн (Node + Chrome).
 
 ---
 

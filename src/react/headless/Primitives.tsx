@@ -1,12 +1,7 @@
 import type { ButtonHTMLAttributes, ChangeEvent, CSSProperties, ReactNode } from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback } from 'react';
 import { usePlayerContext } from './PlayerContext';
-import {
-  BrowserExportCodec,
-  downloadExportBlob,
-  exportBrowserVideo,
-  supportsBrowserExport,
-} from '../../export/browser-export';
+import { BrowserExportCodec, ExportQuality, supportsBrowserExport } from '../../export/browser-export';
 
 /** Состояние, передаваемое в render prop кнопки Play/Pause. */
 export interface PlayPauseButtonRenderProps {
@@ -209,87 +204,40 @@ export interface ExportButtonProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick'> {
   /** Имя скачиваемого файла. По умолчанию `sandbox-export-<timestamp>.mp4`/`.webm` под тип Blob. */
   filename?: string;
-  /** Разрешение кадра. По умолчанию — размер контейнера плеера. */
-  width?: number;
-  height?: number;
   /** `avc` — MP4 (по умолчанию), `vp8`/`vp9` — WebM. */
   codec?: BrowserExportCodec;
+  /** Пресет качества. По умолчанию `'high'`. */
+  quality?: ExportQuality;
+  /** Явный битрейт в битах/с (приоритетнее `quality`). */
   bitrate?: number;
   /** Render prop для кастомной кнопки (Radix, MUI, Tailwind...). */
   children?: ReactNode | ((context: ExportButtonRenderProps) => ReactNode);
-  onExportStart?: () => void;
-  onExportDone?: (blob: Blob) => void;
-  onExportError?: (error: Error) => void;
 }
 
 export function ExportButton({
   filename,
-  width,
-  height,
   codec = 'avc',
+  quality = 'high',
   bitrate,
   children,
-  onExportStart,
-  onExportDone,
-  onExportError,
   disabled,
   ...props
 }: ExportButtonProps) {
-  const { containerRef, durationInFrames, fps, seekTo } = usePlayerContext();
-  const [isExporting, setIsExporting] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const { exportState, exportVideo, abortExport } = usePlayerContext();
+  const { isExporting, progress } = exportState;
   const supported = supportsBrowserExport();
 
-  const exportVideo = useCallback(async () => {
-    const container = containerRef.current;
-    if (!container || (abortRef.current && !abortRef.current.signal.aborted)) return;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setIsExporting(true);
-    setExportError(null);
-    setProgress(0);
-    onExportStart?.();
-
-    try {
-      const blob = await exportBrowserVideo({
-        container,
-        durationInFrames,
-        fps,
-        width: width ?? Math.max(1, Math.floor(container.clientWidth)),
-        height: height ?? Math.max(1, Math.floor(container.clientHeight)),
-        seekTo,
-        codec,
-        bitrate,
-        signal: controller.signal,
-        onProgress: (p) => setProgress(p.progress),
-      });
-      downloadExportBlob(blob, filename);
-      setProgress(1);
-      onExportDone?.(blob);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setExportError(message);
-      onExportError?.(error instanceof Error ? error : new Error(String(error)));
-    } finally {
-      setIsExporting(false);
-      abortRef.current = null;
-    }
-  }, [containerRef, durationInFrames, fps, seekTo, width, height, codec, bitrate, filename, onExportStart, onExportDone, onExportError]);
-
-  const cancel = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
+  const handleExport = useCallback(() => {
+    exportVideo({ filename, codec, quality, bitrate });
+  }, [exportVideo, filename, codec, quality, bitrate]);
 
   const renderContext: ExportButtonRenderProps = {
     isExporting,
     supported,
     progress,
-    error: exportError,
-    exportVideo,
-    cancel,
+    error: exportState.error?.message ?? null,
+    exportVideo: handleExport,
+    cancel: abortExport,
   };
 
   if (typeof children === 'function') {
@@ -303,9 +251,12 @@ export function ExportButton({
     <button
       type="button"
       data-testid="player-export-button"
-      title={exportError ?? (supported ? 'Экспорт в MP4/WebM' : 'WebCodecs не поддерживается')}
+      title={
+        exportState.error?.message ??
+        (supported ? 'Экспорт в MP4/WebM' : 'WebCodecs не поддерживается')
+      }
       disabled={disabled === undefined ? !supported || isExporting : disabled}
-      onClick={supported ? exportVideo : undefined}
+      onClick={supported ? handleExport : undefined}
       {...props}
     >
       {label}

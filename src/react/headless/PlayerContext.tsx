@@ -2,6 +2,25 @@ import { createContext, useContext } from 'react';
 import type { CSSProperties, RefObject } from 'react';
 import type { PlayerRef } from '@remotion/player';
 import type { SnapshotOptions } from '../../sandbox/snapshot';
+import type { BrowserExportCodec, ExportQuality } from '../../export/browser-export';
+
+export interface ExportVideoOptions {
+  /** Имя файла для автозагрузки. `filename: false` — только вернуть Blob. */
+  filename?: string | false;
+  /** `avc` — MP4 (по умолчанию), `vp8`/`vp9` — WebM. */
+  codec?: BrowserExportCodec;
+  /** Пресет качества. По умолчанию `'high'`. */
+  quality?: ExportQuality;
+  /** Явный битрейт в битах/с (приоритетнее `quality`). */
+  bitrate?: number;
+}
+
+export interface ExportState {
+  isExporting: boolean;
+  progress: number | null;
+  phase: string | null;
+  error: Error | null;
+}
 
 export interface PlayerContextValue {
   playerRef: RefObject<PlayerRef | null>;
@@ -24,6 +43,9 @@ export interface PlayerContextValue {
   setPan: (pan: { x: number; y: number } | ((prev: { x: number; y: number }) => { x: number; y: number })) => void;
   resetZoomPan: () => void;
   takeSnapshot: (options?: SnapshotOptions) => Promise<string>;
+  exportState: ExportState;
+  exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
+  abortExport: () => void;
 }
 
 export const PlayerContext = createContext<PlayerContextValue | null>(null);

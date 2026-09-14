@@ -5,6 +5,9 @@ export interface SnapshotOptions {
   quality?: number;
   /** Масштаб растеризации. По умолчанию 1. */
   scale?: number;
+  /** Целевой размер кадра для рендера 1:1 (без UI-масштаба). */
+  targetWidth?: number;
+  targetHeight?: number;
 }
 
 function tryDirectCanvas(
@@ -67,6 +70,52 @@ function rasterize(
   });
 }
 
+/** Размер кадра: целевые ширина/высота (1:1) или размер контейнера × scale. */
+export function resolveSnapshotSize(
+  rect: { width: number; height: number },
+  targetWidth: number | undefined,
+  targetHeight: number | undefined,
+  scale = 1,
+): { width: number; height: number } {
+  return {
+    width: Math.max(1, Math.round((targetWidth ?? rect.width ?? 1920) * scale)),
+    height: Math.max(1, Math.round((targetHeight ?? rect.height ?? 1080) * scale)),
+  };
+}
+
+/**
+ * Подготавливает клон контейнера для растеризации 1:1 (Anti-blur):
+ *  - сбрасывает UI-зум/панорамирование (`transform`, размеры);
+ *  - снимает медиа-элементы (не нужны и могут «пачкать» canvas);
+ *  - разворачивает блок композиции Remotion (`transform: scale(...)` +
+ *    отрицательные margin) обратно в 1:1.
+ */
+export function prepareSnapshotClone(
+  clone: HTMLElement,
+  width: number,
+  height: number,
+  targetWidth?: number,
+  targetHeight?: number,
+): void {
+  clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+  clone.querySelectorAll('audio, video').forEach((element) => element.remove());
+
+  clone.style.transform = 'none';
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
+
+  if (targetWidth && targetHeight) {
+    for (const element of Array.from(clone.querySelectorAll('div'))) {
+      const el = element as HTMLElement;
+      if (el.style.width === `${targetWidth}px` && el.style.height === `${targetHeight}px`) {
+        el.style.transform = 'scale(1)';
+        el.style.marginLeft = '0';
+        el.style.marginTop = '0';
+      }
+    }
+  }
+}
+
 /**
  * Снимает текущий кадр плеера в data-URL прямо в браузере (Zero-Backend).
  *
@@ -82,19 +131,16 @@ export async function takeContainerSnapshot(
     throw new Error('Контейнер плеера не найден для создания скриншота.');
   }
 
-  const { format = 'image/png', quality = 0.95, scale = 1 } = options;
+  const { format = 'image/png', quality = 0.95, scale = 1, targetWidth, targetHeight } = options;
 
   const direct = tryDirectCanvas(container, format, quality);
   if (direct) return direct;
 
   const rect = container.getBoundingClientRect();
-  const width = Math.max(1, Math.round((rect.width || 1920) * scale));
-  const height = Math.max(1, Math.round((rect.height || 1080) * scale));
+  const { width, height } = resolveSnapshotSize(rect, targetWidth, targetHeight, scale);
 
   const clone = container.cloneNode(true) as HTMLElement;
-  clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-  // Медиа-элементы не нужны в постере и могут «пачкать» canvas (taint).
-  clone.querySelectorAll('audio, video').forEach((element) => element.remove());
+  prepareSnapshotClone(clone, width, height, targetWidth, targetHeight);
 
   const svgString =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +

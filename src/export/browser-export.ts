@@ -26,6 +26,29 @@ export interface ExportProgress {
 
 export type BrowserExportCodec = 'avc' | 'vp8' | 'vp9';
 
+/** Пресеты качества по битам на пиксель (BPP) на каждый кадр. */
+export type ExportQuality = 'low' | 'medium' | 'high';
+
+const QUALITY_BPP: Record<ExportQuality, number> = {
+  low: 0.05,
+  medium: 0.1,
+  high: 0.2,
+};
+
+/**
+ * Считает целевой битрейт из разрешения/частоты кадров и пресета качества.
+ * Пример: 1080×1920 @ 30fps → 62 208 000 px/s; high (×0.2) ≈ 12,4 Мбит/с.
+ */
+export function calculateBitrate(
+  width: number,
+  height: number,
+  fps: number,
+  quality: ExportQuality,
+): number {
+  const pixelsPerSecond = width * height * fps;
+  return Math.round(pixelsPerSecond * QUALITY_BPP[quality]);
+}
+
 export interface BrowserExportOptions {
   /** DOM-контейнер с игровым кадром (обычно `PlayerSandbox` `containerRef`). */
   container: HTMLElement;
@@ -39,7 +62,9 @@ export interface BrowserExportOptions {
   waitRender?: () => Promise<void>;
   /** `avc` — MP4 (H.264, по умолчанию), `vp8`/`vp9` — WebM. */
   codec?: BrowserExportCodec;
-  /** Битрейт видео в битах/с. По умолчанию 5_000_000. */
+  /** Пресет качества. По умолчанию `'medium'`. */
+  quality?: ExportQuality;
+  /** Битрейт видео в битах/с; приоритетнее `quality`. */
   bitrate?: number;
   frameDelayMs?: number;
   onProgress?: (progress: ExportProgress) => void;
@@ -50,6 +75,14 @@ function assertWebCodecs(): void {
   if (typeof (globalThis as any).VideoEncoder === 'undefined') {
     throw new Error('Ваш браузер не поддерживает WebCodecs API (VideoEncoder).');
   }
+}
+
+/**
+ * MP4 (H.264) через WebCodecs требует чётных размеров кадра — округляем
+ * в меньшую сторону до ближайшего чётного, но не меньше 2.
+ */
+export function toEvenFrameSize(value: number): number {
+  return Math.max(2, value - (value % 2));
 }
 
 function defaultWaitRender(frameDelayMs: number): () => Promise<void> {
@@ -102,7 +135,7 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
     height,
     seekTo,
     codec = 'avc',
-    bitrate = 5_000_000,
+    quality = 'medium',
     frameDelayMs = 24,
     onProgress,
     signal,
@@ -111,6 +144,13 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
   if (durationInFrames <= 0 || fps <= 0) {
     throw new Error('Export: durationInFrames и fps должны быть положительными.');
   }
+
+  // H.264/AVC требует чётных размеров кадра — округляем в меньшую сторону.
+  const normalizedWidth = toEvenFrameSize(width);
+  const normalizedHeight = toEvenFrameSize(height);
+
+  // Целевой битрейт: явный `bitrate` важнее пресета качества.
+  const bitrate = options.bitrate ?? calculateBitrate(width, height, fps, quality);
 
   const waitRender = options.waitRender ?? defaultWaitRender(frameDelayMs);
 
@@ -124,8 +164,8 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
   const output = new Output({ format, target });
 
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = normalizedWidth;
+  canvas.height = normalizedHeight;
 
   const videoSource = new CanvasSource(canvas, {
     codec: videoCodec,
@@ -145,8 +185,13 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
       seekTo(frame);
       await waitRender();
 
-      const dataUrl = await takeContainerSnapshot(container, { format: 'image/png', scale: 1 });
-      await drawDataUrlToCanvas(dataUrl, canvas, width, height);
+      const dataUrl = await takeContainerSnapshot(container, {
+        format: 'image/png',
+        scale: 1,
+        targetWidth: width,
+        targetHeight: height,
+      });
+      await drawDataUrlToCanvas(dataUrl, canvas, normalizedWidth, normalizedHeight);
 
       await videoSource.add(frame * secondsPerFrame, secondsPerFrame);
 

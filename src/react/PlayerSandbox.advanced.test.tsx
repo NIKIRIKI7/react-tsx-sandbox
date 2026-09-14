@@ -49,6 +49,8 @@ describe('PlayerSandbox: reliability, DX и headless UI', () => {
 
     await waitFor(() => expect(ref.current?.getCurrentFrame()).toBe(45));
     expect(typeof ref.current?.takeSnapshot).toBe('function');
+    expect(typeof ref.current?.exportVideo).toBe('function');
+    expect(typeof ref.current?.abortExport).toBe('function');
     expect(Array.isArray(ref.current?.getActiveDelayHandles())).toBe(true);
   });
 
