@@ -15,5 +15,14 @@ export default defineConfig({
   target: 'es2020',
   platform: 'neutral',
   treeshake: true,
-  external: ['react', 'react-dom', 'sucrase', 'fflate', '@remotion/player', 'remotion'],
+  external: [
+    'react',
+    'react-dom',
+    'sucrase',
+    'fflate',
+    '@remotion/player',
+    'remotion',
+    'tailwindcss',
+    'postcss',
+  ],
 });

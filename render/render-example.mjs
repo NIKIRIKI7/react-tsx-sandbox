@@ -8,8 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import postcss from 'postcss';
-import tailwindcss from 'tailwindcss';
+import { compileTailwindCss } from './tailwind-v4.mjs';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, renderStill, selectComposition } from '@remotion/renderer';
 
@@ -48,12 +47,7 @@ for (const [file, realPath] of videos) {
 
 // 2. Компилируем Tailwind-утилиты, использованные в сцене.
 console.log('[example] compiling tailwind utilities...');
-const tailwind = await postcss([
-  tailwindcss({ content: [{ raw: source, extension: 'tsx' }] }),
-]).process('@tailwind base;@tailwind components;@tailwind utilities;', {
-  from: undefined,
-});
-const css = tailwind.css;
+const css = await compileTailwindCss(source);
 
 const generatedFile = path.join(generatedDir, 'example-scene.ts');
 writeFileSync(
