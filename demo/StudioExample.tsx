@@ -60,7 +60,7 @@ export function StudioExample() {
           <h1 className="text-xl font-bold text-slate-100">browser-tsx-sandbox · Studio</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">
             Smart Frame Retention, скриншот кадра, safe zones, зум, headless-контролы и{' '}
-            <strong>браузерный экспорт WebM</strong>.
+            <strong>браузерный экспорт MP4/WebM</strong>.
           </p>
         </div>
         <a href="/" className="text-sm text-emerald-400 transition hover:text-emerald-300">
@@ -140,17 +140,17 @@ export function StudioExample() {
                 )}
               />
 
-              <PlayerSandbox.ExportButton filename="studio-export.webm">
+              <PlayerSandbox.ExportButton filename="studio-export.mp4" codec="avc">
                 {({ isExporting, progress, exportVideo, supported }) => (
                   <button
                     type="button"
                     onClick={exportVideo}
                     disabled={!supported || isExporting}
-                    aria-label="Export video as WebM"
+                    aria-label="Export video as MP4"
                     className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-400 transition hover:bg-emerald-900/50 disabled:opacity-50"
                   >
                     <Download size={16} />
-                    {isExporting ? `Exporting ${Math.round((progress ?? 0) * 100)}%` : 'Export WebM'}
+                    {isExporting ? `Exporting ${Math.round((progress ?? 0) * 100)}%` : 'Export MP4'}
                   </button>
                 )}
               </PlayerSandbox.ExportButton>

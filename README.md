@@ -194,7 +194,7 @@ import { Play, Pause } from 'lucide-react';
 | `Timeline` | `render` | `{ currentFrame, durationInFrames, seekTo }` |
 | `TimeDisplay` | `render` | `{ frame, totalFrames, time, totalTime, fps }` |
 | `VolumeControl` | `render` | `{ volume, isMuted, setVolume, toggleMute }` |
-| `ExportButton` | `children`-функция | `{ isExporting, progress, exportVideo, supported }` |
+| `ExportButton` | `children`-функция | `{ isExporting, supported, progress, error, exportVideo, cancel }` |
 
 Внутри `PlayerSandbox.Root` доступен и хук `usePlayerContext()` — для горячих клавиш и внешних контролов. Без render prop примитивы рендерят дефолтную разметку.
 
@@ -350,7 +350,7 @@ import confetti from 'canvas-confetti';
 - **Безопасность.** Затенение глобалов (`window`, `document`, `fetch`…) — защита от случайного и вредоносного доступа, но исполнение идёт в том же JS-realm: это не изоляция уровня ОС. Не запускайте непроверенный код без собственного sandbox-контура.
 - **Сеть.** NPM-импорты и часть e2e требуют доступа к CDN. В Node нативные `https`-импорты не поддерживаются — тесты используют адаптер с `?bundle`.
 - **`takeSnapshot`** для canvas-сцен (WebGL/2D) даёт настоящий PNG/JPEG; для чисто DOM-сцен браузер может пометить canvas как *tainted* и вернётся SVG data-URL.
-- **Браузерный рендер в файл** — WebM-экспорт доступен через WebCodecs (`ExportButton`, `exportBrowserVideo`). Полный H.264/AAC-рендер в файл — только офлайн (Node + Chrome).
+- **Браузерный рендер в файл** — экспорт MP4 (H.264) и WebM (VP8/VP9) через WebCodecs + `mediabunny` (`ExportButton`, `exportBrowserVideo`). Полный MKV/AAC-рендер в файл — только офлайн (Node + Chrome).
 
 ---
 

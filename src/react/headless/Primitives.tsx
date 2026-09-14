@@ -207,11 +207,12 @@ export interface ExportButtonRenderProps {
 
 export interface ExportButtonProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick'> {
-  /** Имя скачиваемого файла. По умолчанию `sandbox-export-<timestamp>.webm`. */
+  /** Имя скачиваемого файла. По умолчанию `sandbox-export-<timestamp>.mp4`/`.webm` под тип Blob. */
   filename?: string;
   /** Разрешение кадра. По умолчанию — размер контейнера плеера. */
   width?: number;
   height?: number;
+  /** `avc` — MP4 (по умолчанию), `vp8`/`vp9` — WebM. */
   codec?: BrowserExportCodec;
   bitrate?: number;
   /** Render prop для кастомной кнопки (Radix, MUI, Tailwind...). */
@@ -225,7 +226,7 @@ export function ExportButton({
   filename,
   width,
   height,
-  codec,
+  codec = 'avc',
   bitrate,
   children,
   onExportStart,
@@ -302,7 +303,7 @@ export function ExportButton({
     <button
       type="button"
       data-testid="player-export-button"
-      title={exportError ?? (supported ? 'Экспорт в WebM' : 'WebCodecs не поддерживается')}
+      title={exportError ?? (supported ? 'Экспорт в MP4/WebM' : 'WebCodecs не поддерживается')}
       disabled={disabled === undefined ? !supported || isExporting : disabled}
       onClick={supported ? exportVideo : undefined}
       {...props}

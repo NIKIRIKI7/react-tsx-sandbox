@@ -6,14 +6,14 @@
 
 Это именно тот use-case, который выделяет `browser-tsx-sandbox` от Remotion-проектов:
 - Remotion требует Node + Chrome + `renderMedia` → файл MP4.
-- browser-tsx-sandbox позволяет экспортировать WebM **прямо в браузере** через WebCodecs (`VideoEncoder` + `VideoFrame`).
+- browser-tsx-sandbox позволяет экспортировать MP4/WebM **прямо в браузере** через WebCodecs (`VideoEncoder`) + `mediabunny`.
 
 ## 2. Обновлённый StudioExample
 
 Файл `demo/StudioExample.tsx` добавляет `ExportButton` в headless-тулбар:
 
 ```tsx
-<PlayerSandbox.ExportButton filename="studio-export.webm">
+<PlayerSandbox.ExportButton filename="studio-export.mp4" codec="avc">
   {({ isExporting, progress, exportVideo, supported }) => (
     <button
       disabled={!supported || isExporting}
@@ -21,7 +21,7 @@
       className={/* ... */}
     >
       <Download size={16} />
-      {isExporting ? `${Math.round(progress.progress * 100)}%` : 'Export WebM'}
+      {isExporting ? `${Math.round(progress.progress * 100)}%` : 'Export MP4'}
     </button>
   )}
 </PlayerSandbox.ExportButton>
@@ -31,11 +31,11 @@
 
 | Что | Было | Стало |
 |---|---|---|
-| Заголовок | "Live Studio" | "Live Studio — браузерный экспорт WebM" |
+| Заголовок | "Live Studio" | "Live Studio — браузерный экспорт MP4/WebM" |
 | Тулбар | 4 примитива | 5 примитивов (+ `ExportButton`) |
 | Иконка | — | `Download` из lucide-react |
 | Disabled-состояние | — | `!supported \|\| isExporting` |
-| Текст кнопки | — | "Export WebM" / `${progress}%` |
+| Текст кнопки | — | "Export MP4" / `${progress}%` |
 
 ## 3. Исправленные SVG-диаграммы
 

@@ -110,6 +110,7 @@ const { component, error, errorPhase } = await facade.compile(tsxSource);
 | `extractAssetZip`, `createAssetUrlMap`, `releaseAssetUrls` | ZIP-ассеты |
 | `MusicLayer`, `SFXLayer`, `TrackLayer`, `useActiveCues` | Data-Driven Timeline |
 | `takeContainerSnapshot`, `createRemotionWatchdog`, `cleanupCanvasWebGl` | надёжность плеера |
+| `exportBrowserVideo`, `downloadExportBlob`, `supportsBrowserExport` | MP4/WebM-экспорт через WebCodecs + mediabunny |
 | `SafeZonesOverlay` | оверлеи safe zones |
 | `PlayerContext`, `usePlayerContext` | состояние плеера |
 
@@ -377,7 +378,7 @@ interface PlayerContextValue {
 | `TimeDisplay` | `render` | `{ frame, totalFrames, time, totalTime, fps }` |
 | `TimelineBar` | `render` | `{ currentFrame, durationInFrames, seekTo }` |
 | `VolumeControl` | `render` | `{ volume, isMuted, setVolume, toggleMute }` |
-| `ExportButton` | `children`-функция | `{ isExporting, progress, exportVideo, supported }` |
+| `ExportButton` | `children`-функция | `{ isExporting, supported, progress, error, exportVideo, cancel }` |
 
 ```tsx
 <PlayerSandbox.PlayButton>
@@ -945,7 +946,7 @@ function isSandboxPassthroughError(error: unknown): boolean;
 
 ### v0.6.0
 - **Плеер:** стабильный `SafeComponent` (без ре-маунта `<Player />`), явные `width/height: 100%` для контейнера и плеера, headless-UI не размонтируется при компиляции/ошибках.
-- **Subpath `./export`:** WebM-экспорт кадра/видео (`browser-tsx-sandbox/export`).
+- **Subpath `./export`:** MP4/WebM-экспорт кадра/видео через WebCodecs + mediabunny (`browser-tsx-sandbox/export`).
 - **Subpath `./plugins`:** Tailwind JIT-плагин (`browser-tsx-sandbox/plugins`).
 - **Subpath `./hmr`:** инкрементальная перекомпиляция VFS, HMR без полного сброса (`browser-tsx-sandbox/hmr`).
 - **Фичи-пайплайн:** `render/features.e2e.test.ts` — E2E-рендер новых сцен, `render:features`.

@@ -35,7 +35,6 @@ export {
   exportBrowserVideo,
   downloadExportBlob,
   supportsBrowserExport,
-  muxWebm,
 } from './export/browser-export';
 export type {
   BrowserExportOptions,
