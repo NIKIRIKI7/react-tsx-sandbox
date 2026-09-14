@@ -194,6 +194,7 @@ import { Play, Pause } from 'lucide-react';
 | `Timeline` | `render` | `{ currentFrame, durationInFrames, seekTo }` |
 | `TimeDisplay` | `render` | `{ frame, totalFrames, time, totalTime, fps }` |
 | `VolumeControl` | `render` | `{ volume, isMuted, setVolume, toggleMute }` |
+| `ExportButton` | `children`-функция | `{ isExporting, progress, exportVideo, supported }` |
 
 Внутри `PlayerSandbox.Root` доступен и хук `usePlayerContext()` — для горячих клавиш и внешних контролов. Без render prop примитивы рендерят дефолтную разметку.
 
@@ -331,12 +332,14 @@ import confetti from 'canvas-confetti';
 | `npm run test:network` | загрузка d3/three/canvas-confetti с esm.sh |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run verify:video` | разбор MP4 (кодек, размеры, длительность) |
+| `npm run arch` | проверка модульной архитектуры (граничные зависимости + циклы) |
 
 ---
 
 ## 📖 Документация
 
 - **[`API.md`](./API.md)** — полный справочник: `SandboxFacade`, `useLiveSandbox`, `<Sandbox>`, `<PlayerSandbox>`, headless-примитивы, Timeline, ассеты, ошибки, безопасность.
+- **[`docs/studio-demo.md`](./docs/studio-demo.md)** — анализ Studio-демо: добавление `ExportButton`, исправленные SVG, проверка архитектуры.
 - **Демо-страницы** — `demo/index.html`, `demo/studio.html`.
 - **Примеры** — `examples/`.
 
@@ -347,7 +350,7 @@ import confetti from 'canvas-confetti';
 - **Безопасность.** Затенение глобалов (`window`, `document`, `fetch`…) — защита от случайного и вредоносного доступа, но исполнение идёт в том же JS-realm: это не изоляция уровня ОС. Не запускайте непроверенный код без собственного sandbox-контура.
 - **Сеть.** NPM-импорты и часть e2e требуют доступа к CDN. В Node нативные `https`-импорты не поддерживаются — тесты используют адаптер с `?bundle`.
 - **`takeSnapshot`** для canvas-сцен (WebGL/2D) даёт настоящий PNG/JPEG; для чисто DOM-сцен браузер может пометить canvas как *tainted* и вернётся SVG data-URL.
-- **Браузерный рендер в файл** невозможен — только офлайн (Node + Chrome) или предпросмотр в Player.
+- **Браузерный рендер в файл** — WebM-экспорт доступен через WebCodecs (`ExportButton`, `exportBrowserVideo`). Полный H.264/AAC-рендер в файл — только офлайн (Node + Chrome).
 
 ---
 

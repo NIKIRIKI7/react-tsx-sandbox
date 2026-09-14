@@ -1,74 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="tlTitle tlDesc">
-  <title id="tlTitle">Data-Driven Timeline cue system</title>
-  <desc id="tlDesc">A JSON array of cues on the left produces stacked music, voice, SFX and sticker tracks on the right, with the music volume ducking while the voice plays.</desc>
+  <title id="tlTitle">Timeline</title>
+  <desc id="tlDesc">Normalized timeline with cues, volumes and a smoothed ducking curve.</desc>
 
   <defs>
     <clipPath id="tlBoard">
-      <rect x="580" y="150" width="556" height="270" rx="16"/>
+      <rect x="160" y="36" width="880" height="180" rx="18"/>
     </clipPath>
   </defs>
 
   <rect width="1200" height="460" rx="28" fill="#080D18"/>
-  <text x="64" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="40" font-weight="800" fill="#E8EEF9">Data-Driven Timeline</text>
-  <text x="64" y="108" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="20" fill="#93A4C0">Describe music, voice, SFX, captions and stickers as one array — then change the array, not the TSX.</text>
+  <text x="64" y="66" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="36" font-weight="800" fill="#E8EEF9">Timeline</text>
+  <text x="64" y="98" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#93A4C0">Audio starts together with the first cue — that's the point of the normalization.</text>
 
-  <!-- cue data -->
-  <rect x="64" y="150" width="480" height="270" rx="16" fill="#0A1426" stroke="#1A2840" stroke-width="1.5"/>
-  <text x="88" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#5E7396">cues.json</text>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#E8EEF9">
-    <text x="88" y="214">const cues = [</text>
-    <text x="88" y="242">  { <tspan fill="#4FDBC8">type: 'music'</tspan>, startFrame: 0,</text>
-    <text x="88" y="270">    payload: { src: <tspan fill="#FBBF24">'bgm.mp3'</tspan> } },</text>
-    <text x="88" y="298">  { <tspan fill="#C4A8FF">type: 'voice'</tspan>, startFrame: 60,</text>
-    <text x="88" y="326">    durationInFrames: 120 },</text>
-    <text x="88" y="354">  { <tspan fill="#FBBF24">type: 'sfx'</tspan>, startFrame: 30 },</text>
-    <text x="88" y="382">  { <tspan fill="#67E8F9">type: 'sticker'</tspan>, startFrame: 30 },</text>
-    <text x="88" y="410">];</text>
+  <!-- Board backdrop -->
+  <rect x="160" y="36" width="880" height="180" rx="18" fill="#151515" stroke="#4C4C4C" stroke-width="1.5"/>
+  <g clip-path="url(#tlBoard)" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">
+    <!-- cues.json -->
+    <g fill="#BDB8A9">
+      <rect x="160" y="36" width="880" height="46" fill="none"/>
+      <text x="16" y="20" font-size="15">"start": 12.34,</text>
+      <text x="16" y="40" font-size="15">"start": 17.05,</text>
+    </g>
   </g>
 
-  <!-- timeline board -->
-  <g clip-path="url(#tlBoard)">
-    <rect x="580" y="150" width="556" height="270" fill="#0C1526"/>
-    <rect x="580" y="150" width="556" height="34" fill="#101C33"/>
-    <text x="600" y="172" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#93A4C0">timeline · 300 frames</text>
-    <text x="1116" y="172" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#4FDBC8">frame 150</text>
-
-    <!-- lane backgrounds -->
-    <g fill="#101C33">
-      <rect x="740" y="214" width="380" height="20" rx="6"/>
-      <rect x="740" y="260" width="380" height="20" rx="6"/>
-      <rect x="740" y="306" width="380" height="20" rx="6"/>
-      <rect x="740" y="352" width="380" height="20" rx="6"/>
-    </g>
-
-    <!-- cues -->
-    <rect x="740" y="214" width="380" height="20" rx="6" fill="#4FDBC8" opacity="0.85"/>
-    <rect x="816" y="260" width="152" height="20" rx="6" fill="#C4A8FF"/>
-    <rect x="778" y="306" width="14" height="20" rx="6" fill="#FBBF24"/>
-    <rect x="968" y="306" width="14" height="20" rx="6" fill="#FBBF24"/>
-    <rect x="778" y="352" width="42" height="20" rx="6" fill="#67E8F9"/>
-    <rect x="968" y="352" width="42" height="20" rx="6" fill="#67E8F9"/>
-
-    <!-- ducking curve over music -->
-    <path d="M 740 220 L 814 220 L 826 231 L 960 231 L 972 220 L 1120 220"
-          fill="none" stroke="#08111F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="846" y="248" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7C90B0">volume 0.15</text>
-
-    <!-- track labels -->
-    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', PingFang SC, sans-serif" font-size="16">
-      <text x="600" y="218" font-weight="700" fill="#E8EEF9">MUSIC</text>
-      <text x="600" y="238" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#4FDBC8">MusicLayer</text>
-      <text x="600" y="264" font-weight="700" fill="#E8EEF9">VOICE</text>
-      <text x="600" y="284" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#C4A8FF">Sequence + Audio</text>
-      <text x="600" y="310" font-weight="700" fill="#E8EEF9">SFX</text>
-      <text x="600" y="330" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#FBBF24">SFXLayer</text>
-      <text x="600" y="356" font-weight="700" fill="#E8EEF9">STICKER</text>
-      <text x="600" y="376" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#67E8F9">TrackLayer</text>
-    </g>
-
-    <!-- playhead -->
-    <line x1="930" y1="184" x2="930" y2="420" stroke="#4FDBC8" stroke-width="2"/>
-    <polygon points="924,184 936,184 930,192" fill="#4FDBC8"/>
+  <!-- Timeline tracks -->
+  <g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif">
+    <rect x="64" y="140" width="1072" height="250" rx="18" fill="#0E1830" stroke="#2A4A5A" stroke-width="1.5"/>
+    <text x="92" y="180" font-size="16" font-weight="700" fill="#C7D3E6">Audio</text>
+    <text x="92" y="222" font-size="16" font-weight="700" fill="#C7D3E6" xml:space="preserve">Audio</text>
+    <text x="92" y="264" font-size="16" font-weight="700" fill="#C7D3E6">Volume</text>
+    <text x="92" y="306" font-size="16" font-weight="700" fill="#C7D3E6">Cues</text>
   </g>
-  <rect x="580" y="150" width="556" height="270" rx="16" fill="none" stroke="#22314C" stroke-width="1.5"/>
+
+  <rect x="60" y="182" width="1080" height="216" rx="22" fill="#0C1526" stroke="#2A4A5A" stroke-width="1.5"/>
 </svg>

@@ -76,6 +76,7 @@
     "demo": "vite demo --open",
     "demo:build": "vite build demo",
     "verify:video": "node render/verify-video.mjs",
+    "arch": "node scripts/verify-architecture.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

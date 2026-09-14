@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import * as Remotion from 'remotion';
-import { Camera, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Download, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { PlayerSandbox } from '../src/player';
 import type { PlayerSandboxRef } from '../src/player';
 import './styles.css';
@@ -59,8 +59,8 @@ export function StudioExample() {
         <div>
           <h1 className="text-xl font-bold text-slate-100">browser-tsx-sandbox · Studio</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">
-            Smart Frame Retention, ref-API, скриншот кадра, safe zones, зум и headless-контролы на
-            render props.
+            Smart Frame Retention, скриншот кадра, safe zones, зум, headless-контролы и{' '}
+            <strong>браузерный экспорт WebM</strong>.
           </p>
         </div>
         <a href="/" className="text-sm text-emerald-400 transition hover:text-emerald-300">
@@ -70,7 +70,7 @@ export function StudioExample() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-          <PlayerSandbox
+          <PlayerSandbox.Root
             ref={playerRef}
             config={{
               code: STUDIO_CODE,
@@ -140,6 +140,21 @@ export function StudioExample() {
                 )}
               />
 
+              <PlayerSandbox.ExportButton filename="studio-export.webm">
+                {({ isExporting, progress, exportVideo, supported }) => (
+                  <button
+                    type="button"
+                    onClick={exportVideo}
+                    disabled={!supported || isExporting}
+                    aria-label="Export video as WebM"
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-400 transition hover:bg-emerald-900/50 disabled:opacity-50"
+                  >
+                    <Download size={16} />
+                    {isExporting ? `Exporting ${Math.round((progress ?? 0) * 100)}%` : 'Export WebM'}
+                  </button>
+                )}
+              </PlayerSandbox.ExportButton>
+
               <button
                 type="button"
                 onClick={capture}
@@ -149,7 +164,7 @@ export function StudioExample() {
                 Capture frame
               </button>
             </div>
-          </PlayerSandbox>
+          </PlayerSandbox.Root>
         </section>
 
         <aside className="h-fit rounded-2xl border border-slate-800 bg-slate-900/60 p-4">

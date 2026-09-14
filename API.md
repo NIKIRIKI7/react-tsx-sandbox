@@ -377,6 +377,7 @@ interface PlayerContextValue {
 | `TimeDisplay` | `render` | `{ frame, totalFrames, time, totalTime, fps }` |
 | `TimelineBar` | `render` | `{ currentFrame, durationInFrames, seekTo }` |
 | `VolumeControl` | `render` | `{ volume, isMuted, setVolume, toggleMute }` |
+| `ExportButton` | `children`-функция | `{ isExporting, progress, exportVideo, supported }` |
 
 ```tsx
 <PlayerSandbox.PlayButton>
@@ -934,6 +935,7 @@ function isSandboxPassthroughError(error: unknown): boolean;
 | `build` | `tsup` → `dist/` (ESM + CJS + `.d.ts`) |
 | `pack:check` | `npm pack --dry-run` |
 | `verify:video` | разбор MP4 (кодек, размеры, длительность) |
+| `arch` | проверка модульной архитектуры (`scripts/verify-architecture.mjs`) |
 
 В публикацию входят `dist/`, `README.md`, `API.md`. `react` — peer, `sucrase`/`fflate` — deps, `@remotion/player`/`remotion` — optional peer.
 
