@@ -67,17 +67,15 @@ function uint16(value: number): Uint8Array {
 function vint(value: number | bigint): Uint8Array {
   let v = typeof value === 'bigint' ? value : BigInt(value);
   for (let len = 1; len <= 8; len++) {
-    const valueBits = 7 * len;
-    if (v <= (1n << BigInt(valueBits)) - 1n) {
+    const maxVal = (1n << BigInt(7 * len)) - 2n;
+    if (v <= maxVal) {
       const out = new Uint8Array(len);
       let remaining = v;
       for (let i = len - 1; i >= 1; i--) {
         out[i] = Number(remaining & 0xffn);
         remaining >>= 8n;
       }
-      // Маркер vint: (len-1) единиц и завершающий ноль в старшем байте.
-      const marker = (((1 << len) - 1) ^ 1) << (8 - len);
-      out[0] = Number(remaining) | marker;
+      out[0] = Number(remaining) | (1 << (8 - len));
       return out;
     }
   }
@@ -178,7 +176,7 @@ export function muxWebm({ codecId, width, height, fps, frames }: WebmMuxerOption
     ID_TRACK_ENTRY,
     [
       element(ID_TRACK_NUMBER, vint(BigInt(1))),
-      element(ID_TRACK_UID, vint(BigInt((Math.random() * 0xffffffff) | 1))),
+      element(ID_TRACK_UID, vint(Math.floor(Math.random() * 0xfffffff) + 1)),
       element(ID_TRACK_TYPE, Uint8Array.of(1)),
       element(ID_CODEC_ID, string(codecId)),
       element(
@@ -224,7 +222,7 @@ export function muxWebm({ codecId, width, height, fps, frames }: WebmMuxerOption
   flushCluster();
 
   // Сегмент с неизвестным размером — допустимо для потока, размер уточняется по EOF.
-  const segmentHeader = [...ID_SEGMENT, ...Uint8Array.of(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)];
+  const segmentHeader = [...ID_SEGMENT, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
   const parts: Uint8Array[] = [ebmlHeader, Uint8Array.from(segmentHeader), info, tracks, ...clusters];
   const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
   const buffer = new Uint8Array(totalLength);
