@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SandboxFacade, SandboxFacadeOptions } from '../facade';
-import { ModuleRegistry, VirtualFileSystem } from '../core/types';
+import { HmrEvent, ModuleRegistry, VirtualFileSystem } from '../core/types';
 import { RuntimeRenderError } from '../core/errors';
 import * as React from 'react';
 
@@ -14,6 +14,8 @@ export interface UseLiveSandboxOptions extends SandboxFacadeOptions {
   debounceMs?: number;
   /** Точка входа VFS. По умолчанию `/App.tsx`. */
   entry?: string;
+  /** Инкрементальная перекомпиляция VFS (только для object-VFS). По умолчанию false. */
+  hmr?: boolean;
   /** Колбэк ошибки компиляции/загрузки. */
   onError?: (error: Error) => void;
   /** Колбэк успешной компиляции. */
@@ -26,6 +28,8 @@ export interface UseLiveSandboxResult {
   isCompiling: boolean;
   runtimeError: RuntimeRenderError | Error | null;
   setRuntimeError: (error: RuntimeRenderError | Error | null) => void;
+  /** Сводка последнего HMR-обновления (когда включён `hmr`). */
+  lastHmr?: HmrEvent | null;
 }
 
 /**
@@ -60,6 +64,7 @@ export function useLiveSandbox(
   const [error, setError] = useState<Error | null>(null);
   const [runtimeError, setRuntimeError] = useState<RuntimeRenderError | Error | null>(null);
   const [isCompiling, setIsCompiling] = useState(true);
+  const [lastHmr, setLastHmr] = useState<HmrEvent | null>(null);
 
   const inputKey = typeof codeOrFiles === 'string' ? codeOrFiles : JSON.stringify(codeOrFiles);
   const assetsKey = JSON.stringify(localAssets ?? {});
@@ -74,24 +79,36 @@ export function useLiveSandbox(
     setIsCompiling(true);
     setRuntimeError(null);
 
+    const derive = (result: { component: any; error: Error | null; executionTimeMs: number }) => {
+      if (result.error) {
+        setError(result.error);
+        setComponent(null);
+        optionsRef.current.onError?.(result.error);
+      } else if (result.component) {
+        setError(null);
+        setComponent(() => result.component);
+        optionsRef.current.onCompiled?.({
+          component: result.component,
+          executionTimeMs: result.executionTimeMs,
+        });
+      }
+    };
+
     const timer = setTimeout(() => {
-      facade
-        .compile(codeOrFiles, { signal: controller.signal, entry: optionsRef.current.entry })
+      const useHmr = optionsRef.current.hmr === true && typeof codeOrFiles !== 'string';
+
+      const evaluation = useHmr
+        ? facade.hmrUpdate(codeOrFiles as VirtualFileSystem, {
+            signal: controller.signal,
+            entry: optionsRef.current.entry,
+          })
+        : facade.compile(codeOrFiles, { signal: controller.signal, entry: optionsRef.current.entry });
+
+      evaluation
         .then((result) => {
           if (!isMounted || controller.signal.aborted) return;
-
-          if (result.error) {
-            setError(result.error);
-            setComponent(null);
-            optionsRef.current.onError?.(result.error);
-          } else if (result.component) {
-            setError(null);
-            setComponent(() => result.component);
-            optionsRef.current.onCompiled?.({
-              component: result.component,
-              executionTimeMs: result.executionTimeMs,
-            });
-          }
+          derive(result);
+          if (useHmr && 'hmr' in result) setLastHmr((result as { hmr: HmrEvent }).hmr);
         })
         .catch((err: unknown) => {
           if (!isMounted || controller.signal.aborted) return;
@@ -113,5 +130,5 @@ export function useLiveSandbox(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputKey, assetsKey, debounceMs]);
 
-  return { Component, error, isCompiling, runtimeError, setRuntimeError };
+  return { Component, error, isCompiling, runtimeError, setRuntimeError, lastHmr };
 }

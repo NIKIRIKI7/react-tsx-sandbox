@@ -15,6 +15,17 @@ export interface EvaluationResult<T = any> {
   errorPhase?: import('./errors').ErrorPhase;
 }
 
+/** Сводка HMR-обновления: какие файлы изменились, а какие переиспользованы. */
+export interface HmrEvent {
+  changed: string[];
+  added: string[];
+  removed: string[];
+  recompiled: string[];
+  kept: string[];
+}
+
+export type HmrUpdateResult<T = any> = EvaluationResult<T> & { hmr: HmrEvent };
+
 /** Фабрика URL для загрузки пакета (esm.sh, jsdelivr, приватный CDN и т.п.). */
 export type CdnResolver = (pkg: string) => string;
 

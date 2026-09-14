@@ -13,6 +13,7 @@ render/bundle-audio/
 render/bundle-animation/
 render/bundle-timeline/
 render/bundle-voiceover/
+render/bundle-features/
 render/.generated/
 render/public/
 demo/dist/

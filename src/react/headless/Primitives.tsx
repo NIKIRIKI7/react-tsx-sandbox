@@ -1,5 +1,12 @@
 import type { ButtonHTMLAttributes, ChangeEvent, CSSProperties, ReactNode } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { usePlayerContext } from './PlayerContext';
+import {
+  BrowserExportCodec,
+  downloadExportBlob,
+  exportBrowserVideo,
+  supportsBrowserExport,
+} from '../../export/browser-export';
 
 /** Состояние, передаваемое в render prop кнопки Play/Pause. */
 export interface PlayPauseButtonRenderProps {
@@ -185,5 +192,122 @@ export function VolumeControl({ className, style, render }: VolumeControlProps) 
         onChange={(event) => setVolume(Number(event.target.value))}
       />
     </div>
+  );
+}
+
+/** Состояние, передаваемое в render prop кнопки экспорта. */
+export interface ExportButtonRenderProps {
+  isExporting: boolean;
+  supported: boolean;
+  progress: number | null;
+  error: string | null;
+  exportVideo: () => void;
+  cancel: () => void;
+}
+
+export interface ExportButtonProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick'> {
+  /** Имя скачиваемого файла. По умолчанию `sandbox-export-<timestamp>.webm`. */
+  filename?: string;
+  /** Разрешение кадра. По умолчанию — размер контейнера плеера. */
+  width?: number;
+  height?: number;
+  codec?: BrowserExportCodec;
+  bitrate?: number;
+  /** Render prop для кастомной кнопки (Radix, MUI, Tailwind...). */
+  children?: ReactNode | ((context: ExportButtonRenderProps) => ReactNode);
+  onExportStart?: () => void;
+  onExportDone?: (blob: Blob) => void;
+  onExportError?: (error: Error) => void;
+}
+
+export function ExportButton({
+  filename,
+  width,
+  height,
+  codec,
+  bitrate,
+  children,
+  onExportStart,
+  onExportDone,
+  onExportError,
+  disabled,
+  ...props
+}: ExportButtonProps) {
+  const { containerRef, durationInFrames, fps, seekTo } = usePlayerContext();
+  const [isExporting, setIsExporting] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const supported = supportsBrowserExport();
+
+  const exportVideo = useCallback(async () => {
+    const container = containerRef.current;
+    if (!container || (abortRef.current && !abortRef.current.signal.aborted)) return;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsExporting(true);
+    setExportError(null);
+    setProgress(0);
+    onExportStart?.();
+
+    try {
+      const blob = await exportBrowserVideo({
+        container,
+        durationInFrames,
+        fps,
+        width: width ?? Math.max(1, Math.floor(container.clientWidth)),
+        height: height ?? Math.max(1, Math.floor(container.clientHeight)),
+        seekTo,
+        codec,
+        bitrate,
+        signal: controller.signal,
+        onProgress: (p) => setProgress(p.progress),
+      });
+      downloadExportBlob(blob, filename);
+      setProgress(1);
+      onExportDone?.(blob);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setExportError(message);
+      onExportError?.(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      setIsExporting(false);
+      abortRef.current = null;
+    }
+  }, [containerRef, durationInFrames, fps, seekTo, width, height, codec, bitrate, filename, onExportStart, onExportDone, onExportError]);
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const renderContext: ExportButtonRenderProps = {
+    isExporting,
+    supported,
+    progress,
+    error: exportError,
+    exportVideo,
+    cancel,
+  };
+
+  if (typeof children === 'function') {
+    return <>{children(renderContext)}</>;
+  }
+
+  const percent = progress === null ? null : Math.round(progress * 100);
+  const label = isExporting && percent !== null ? `${percent}%` : (children ?? '⬇');
+
+  return (
+    <button
+      type="button"
+      data-testid="player-export-button"
+      title={exportError ?? (supported ? 'Экспорт в WebM' : 'WebCodecs не поддерживается')}
+      disabled={disabled === undefined ? !supported || isExporting : disabled}
+      onClick={supported ? exportVideo : undefined}
+      {...props}
+    >
+      {label}
+    </button>
   );
 }

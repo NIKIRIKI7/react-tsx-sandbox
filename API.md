@@ -941,6 +941,13 @@ function isSandboxPassthroughError(error: unknown): boolean;
 
 ## 20. История версий
 
+### v0.6.0
+- **Плеер:** стабильный `SafeComponent` (без ре-маунта `<Player />`), явные `width/height: 100%` для контейнера и плеера, headless-UI не размонтируется при компиляции/ошибках.
+- **Subpath `./export`:** WebM-экспорт кадра/видео (`browser-tsx-sandbox/export`).
+- **Subpath `./plugins`:** Tailwind JIT-плагин (`browser-tsx-sandbox/plugins`).
+- **Subpath `./hmr`:** инкрементальная перекомпиляция VFS, HMR без полного сброса (`browser-tsx-sandbox/hmr`).
+- **Фичи-пайплайн:** `render/features.e2e.test.ts` — E2E-рендер новых сцен, `render:features`.
+
 ### v0.5.0
 - **Audio:** музыка, озвучка, SFX через Remotion `<Audio />`; Audio Ducking.
 - **Data-Driven Timeline:** `Cue`, `useActiveCues`, `MusicLayer`, `SFXLayer`, `TrackLayer`.

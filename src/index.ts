@@ -21,6 +21,26 @@ export { ModuleCache } from './library-manager/cache';
 export { loadMissingModules, defaultCdnResolver, defaultImporter } from './library-manager/loader';
 export type { ModuleImporter, LoadModulesOptions } from './library-manager/loader';
 
+export { diffFiles, buildImportsGraph, getDependents } from './core/hmr';
+export type { HmrChanges } from './core/hmr';
+
+export { createTailwindJitPlugin, collectTailwindClasses, scopedTailwindCss } from './plugins/tailwind-plugin';
+export type {
+  TailwindJitPluginOptions,
+} from './plugins/tailwind-plugin';
+
+export {
+  exportBrowserVideo,
+  downloadExportBlob,
+  supportsBrowserExport,
+  muxWebm,
+} from './export/browser-export';
+export type {
+  BrowserExportOptions,
+  BrowserExportCodec,
+  ExportProgress,
+} from './export/browser-export';
+
 export { extractBareImports, scanImports, resolveVfsPath, stripComments } from './compiler/analyzer';
 export type { ScanResult } from './compiler/analyzer';
 export { compileTsx, SucraseCompilerAdapter, cleanMarkdownFences } from './compiler/transform';
@@ -47,6 +67,7 @@ export {
   TimeDisplay,
   TimelineBar,
   VolumeControl,
+  ExportButton,
 } from './react/headless/Primitives';
 export type {
   PlayPauseButtonProps,
@@ -57,6 +78,8 @@ export type {
   TimelineBarRenderProps,
   VolumeControlProps,
   VolumeControlRenderProps,
+  ExportButtonProps,
+  ExportButtonRenderProps,
 } from './react/headless/Primitives';
 
 export { extractAssetZip, createAssetUrlMap, releaseAssetUrls } from './assets/zip';

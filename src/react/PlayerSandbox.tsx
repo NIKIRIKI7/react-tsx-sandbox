@@ -20,6 +20,7 @@ import { SafeZonesOverlay } from './guides/SafeZonesOverlay';
 import type { SafeZonePreset } from './guides/SafeZonesOverlay';
 import { PlayerContext, PlayerContextValue } from './headless/PlayerContext';
 import {
+  ExportButton,
   PlayPauseButton,
   TimeDisplay,
   TimelineBar,
@@ -86,22 +87,19 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
     const input = config.files ?? config.code ?? '';
     const internalPlayerRef = useRef<PlayerRef | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
-
-    // Smart Frame Retention
     const currentFrameRef = useRef(0);
     const wasPlayingRef = useRef(false);
+
     const [currentFrame, setCurrentFrame] = useState(0);
     const [isPlaying, setIsPlaying] = useState(config.autoPlay ?? false);
     const [isMuted, setIsMuted] = useState(false);
     const [volume, setVolumeState] = useState(1);
-
-    // Zoom & Pan
     const [zoom, setZoom] = useState(config.canvasControls?.initialZoom ?? 1);
     const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
     const isPanningRef = useRef(false);
     const startMouseRef = useRef({ x: 0, y: 0 });
 
-    // delayRender Watchdog
     const { proxiedRemotion, getActiveHandles, clearAllTimeouts } = useMemo(
       () => createRemotionWatchdog(config.modules?.remotion, config.delayRenderTimeoutMs ?? 4000),
       [config.modules?.remotion, config.delayRenderTimeoutMs],
@@ -119,16 +117,44 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       config,
     );
 
-    // Восстановление кадра и состояния воспроизведения после перекомпиляции
+    // Актуальная конфигурация для использования внутри мемоизированных замыканий
+    const configRef = useRef(config);
+    configRef.current = config;
+
+    // Мемоизируем SafeComponent, чтобы избежать ре-маунта <Player> на каждом обновлении состояния (time/play)
+    const SafeComponent: React.FC<Record<string, unknown>> = useMemo(() => {
+      if (!Component) return () => null;
+      const Wrapped: React.FC<Record<string, unknown>> = (props) => (
+        <SandboxErrorBoundary
+          resetKey={input}
+          onError={(err) => {
+            setRuntimeError(err);
+            configRef.current.onError?.(err);
+          }}
+          fallback={(err) =>
+            configRef.current.renderError ? (
+              <>{configRef.current.renderError({ Component, error: err, isCompiling: false, isRuntime: true })}</>
+            ) : (
+              <div style={{ ...defaultErrorStyle, padding: 16 }}>{err.message}</div>
+            )
+          }
+        >
+          <Component {...props} />
+        </SandboxErrorBoundary>
+      );
+      Wrapped.displayName = 'SafeComponent';
+      return Wrapped;
+    }, [Component, input, setRuntimeError]);
+
     useEffect(() => {
       if (config.smartFrameRetention === false) return;
       const player = internalPlayerRef.current;
       if (!Component || !player) return;
+
       player.seekTo(currentFrameRef.current);
       if (wasPlayingRef.current) player.play();
     }, [Component, config.smartFrameRetention]);
 
-    // Очистка WebGL-контекстов и таймеров при размонтировании
     useEffect(() => {
       return () => {
         clearAllTimeouts();
@@ -136,7 +162,6 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       };
     }, [clearAllTimeouts]);
 
-    // Синхронизация состояния плеера
     useEffect(() => {
       const player = internalPlayerRef.current;
       if (!player) return;
@@ -146,10 +171,12 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
         currentFrameRef.current = frame;
         setCurrentFrame(frame);
       };
+
       const onPlay = () => {
         wasPlayingRef.current = true;
         setIsPlaying(true);
       };
+
       const onPause = () => {
         wasPlayingRef.current = false;
         setIsPlaying(false);
@@ -201,107 +228,56 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
     }, []);
 
     const resetZoomPan = useCallback(() => {
-      setZoom(1);
+      setZoom(config.canvasControls?.initialZoom ?? 1);
       setPan({ x: 0, y: 0 });
+    }, [config.canvasControls?.initialZoom]);
+
+    const seekTo = useCallback((frame: number) => {
+      internalPlayerRef.current?.seekTo(frame);
+      currentFrameRef.current = frame;
+      setCurrentFrame(frame);
     }, []);
+
+    const play = useCallback(() => internalPlayerRef.current?.play(), []);
+    const pause = useCallback(() => internalPlayerRef.current?.pause(), []);
+    const toggle = useCallback(() => internalPlayerRef.current?.toggle(), []);
+    const setVolume = useCallback((value: number) => {
+      setVolumeState(value);
+      internalPlayerRef.current?.setVolume(value);
+    }, []);
+    const toggleMute = useCallback(() => {
+      setIsMuted((prev) => {
+        if (prev) internalPlayerRef.current?.unmute();
+        else internalPlayerRef.current?.mute();
+        return !prev;
+      });
+    }, []);
+    const takeSnapshot = useCallback(
+      (options?: SnapshotOptions) => takeContainerSnapshot(containerRef.current, options),
+      [],
+    );
 
     useImperativeHandle(
       ref,
       () => ({
-        seekTo: (frame: number) => {
-          internalPlayerRef.current?.seekTo(frame);
-          currentFrameRef.current = frame;
-          setCurrentFrame(frame);
-        },
-        getCurrentFrame: () =>
-          internalPlayerRef.current?.getCurrentFrame() ?? currentFrameRef.current,
+        seekTo,
+        getCurrentFrame: () => internalPlayerRef.current?.getCurrentFrame() ?? currentFrameRef.current,
         isPlaying: () => internalPlayerRef.current?.isPlaying() ?? false,
-        play: () => internalPlayerRef.current?.play(),
-        pause: () => internalPlayerRef.current?.pause(),
-        toggle: () => internalPlayerRef.current?.toggle(),
-        takeSnapshot: (options?: SnapshotOptions) =>
-          takeContainerSnapshot(containerRef.current, options),
-        getActiveDelayHandles: () =>
-          getActiveHandles().map((handle) => handle.label ?? `handle_${handle.id}`),
+        play,
+        pause,
+        toggle,
+        takeSnapshot,
+        getActiveDelayHandles: () => getActiveHandles().map((handle) => handle.label ?? `handle_${handle.id}`),
         getRemotionPlayerRef: () => internalPlayerRef.current,
         resetZoomPan,
       }),
-      [getActiveHandles, resetZoomPan],
+      [getActiveHandles, resetZoomPan, seekTo, play, pause, toggle, takeSnapshot],
     );
 
     const activeError = runtimeError ?? error;
     const context: SandboxRenderContext = { Component, error: activeError, isCompiling };
 
-    if (config.render) {
-      return <>{config.render(context)}</>;
-    }
-
-    if (error) {
-      if (config.renderError) {
-        return <>{config.renderError({ ...context, error, isRuntime: false })}</>;
-      }
-      return <pre style={{ ...defaultErrorStyle, ...config.style }}>{error.message}</pre>;
-    }
-
-    if (isCompiling || !Component) {
-      return config.renderLoading ? <>{config.renderLoading(context)}</> : null;
-    }
-
-    const SafeComponent: React.FC<Record<string, unknown>> = (props) => (
-      <SandboxErrorBoundary
-        resetKey={input}
-        onError={(err) => {
-          setRuntimeError(err);
-          config.onError?.(err);
-        }}
-        fallback={(err) =>
-          config.renderError ? (
-            <>{config.renderError({ ...context, error: err, isRuntime: true })}</>
-          ) : (
-            <div style={{ ...defaultErrorStyle, padding: 16 }}>{err.message}</div>
-          )
-        }
-      >
-        <Component {...props} />
-      </SandboxErrorBoundary>
-    );
-
-    const playerElement = (
-      <div
-        ref={containerRef}
-        data-testid="player-container"
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-          transformOrigin: 'center center',
-        }}
-      >
-        <Player
-          ref={internalPlayerRef}
-          component={SafeComponent}
-          durationInFrames={config.durationInFrames ?? 300}
-          fps={config.fps ?? 30}
-          compositionWidth={config.width ?? 1920}
-          compositionHeight={config.height ?? 1080}
-          controls={config.controls ?? true}
-          loop={config.loop}
-          autoPlay={config.autoPlay}
-          inputProps={config.inputProps}
-          className={config.className}
-          style={config.style}
-          {...config.playerProps}
-        />
-
-        {config.safeZone ? <SafeZonesOverlay preset={config.safeZone} /> : null}
-      </div>
-    );
-
-    const contextValue: PlayerContextValue = {
+    const contextValue: PlayerContextValue = useMemo(() => ({
       playerRef: internalPlayerRef,
       containerRef,
       currentFrame,
@@ -312,31 +288,94 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       volume,
       zoom,
       pan,
-      seekTo: (frame) => internalPlayerRef.current?.seekTo(frame),
-      play: () => internalPlayerRef.current?.play(),
-      pause: () => internalPlayerRef.current?.pause(),
-      toggle: () => internalPlayerRef.current?.toggle(),
-      setVolume: (value) => {
-        setVolumeState(value);
-        internalPlayerRef.current?.setVolume(value);
-      },
-      toggleMute: () => {
-        setIsMuted((prev) => {
-          if (prev) internalPlayerRef.current?.unmute();
-          else internalPlayerRef.current?.mute();
-          return !prev;
-        });
-      },
+      seekTo,
+      play,
+      pause,
+      toggle,
+      setVolume,
+      toggleMute,
       setZoom,
       setPan,
       resetZoomPan,
-      takeSnapshot: (options) => takeContainerSnapshot(containerRef.current, options),
-    };
+      takeSnapshot,
+    }), [
+      currentFrame,
+      config.durationInFrames,
+      config.fps,
+      isPlaying,
+      isMuted,
+      volume,
+      zoom,
+      pan,
+      seekTo,
+      play,
+      pause,
+      toggle,
+      setVolume,
+      toggleMute,
+      resetZoomPan,
+      takeSnapshot,
+    ]);
+
+    let contentNode: React.ReactNode;
+
+    if (config.render) {
+      contentNode = <>{config.render(context)}</>;
+    } else if (error) {
+      if (config.renderError) {
+        contentNode = <>{config.renderError({ ...context, error, isRuntime: false })}</>;
+      } else {
+        contentNode = <pre style={{ ...defaultErrorStyle, ...config.style }}>{error.message}</pre>;
+      }
+    } else if (isCompiling || !Component) {
+      contentNode = config.renderLoading ? <>{config.renderLoading(context)}</> : null;
+    } else {
+      const playerElement = (
+        <div
+          ref={containerRef}
+          data-testid="player-container"
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            width: '100%',
+            height: '100%',
+            transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
+            transformOrigin: 'center center',
+          }}
+        >
+          <Player
+            ref={internalPlayerRef}
+            component={SafeComponent}
+            durationInFrames={config.durationInFrames ?? 300}
+            fps={config.fps ?? 30}
+            compositionWidth={config.width ?? 1920}
+            compositionHeight={config.height ?? 1080}
+            controls={config.controls ?? true}
+            loop={config.loop}
+            autoPlay={config.autoPlay}
+            inputProps={config.inputProps}
+            className={config.className}
+            style={{
+              width: '100%',
+              height: '100%',
+              ...config.style,
+            }}
+            {...config.playerProps}
+          />
+          {config.safeZone ? <SafeZonesOverlay preset={config.safeZone} /> : null}
+        </div>
+      );
+      contentNode = config.wrapper ? <config.wrapper>{playerElement}</config.wrapper> : playerElement;
+    }
 
     return (
       <PlayerContext.Provider value={contextValue}>
-        <div className={className} style={{ position: 'relative', ...style }}>
-          {config.wrapper ? <config.wrapper>{playerElement}</config.wrapper> : playerElement}
+        <div className={className} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
+          {contentNode}
           {children}
         </div>
       </PlayerContext.Provider>
@@ -352,5 +391,6 @@ export const PlayerSandbox = Object.assign(PlayerSandboxComponent, {
   TimeDisplay,
   Timeline: TimelineBar,
   VolumeControl,
+  ExportButton,
   Guides: SafeZonesOverlay,
 });

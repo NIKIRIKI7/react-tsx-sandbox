@@ -1,6 +1,6 @@
 {
   "name": "browser-tsx-sandbox",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Pure client-side TSX compiler and sandbox evaluator with dynamic NPM library loading.",
   "type": "module",
   "license": "MIT",
@@ -18,6 +18,21 @@
       "types": "./dist/player.d.ts",
       "import": "./dist/player.js",
       "require": "./dist/player.cjs"
+    },
+    "./export": {
+      "types": "./dist/export/browser-export.d.ts",
+      "import": "./dist/export/browser-export.js",
+      "require": "./dist/export/browser-export.cjs"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/tailwind-plugin.d.ts",
+      "import": "./dist/plugins/tailwind-plugin.js",
+      "require": "./dist/plugins/tailwind-plugin.cjs"
+    },
+    "./hmr": {
+      "types": "./dist/core/hmr.d.ts",
+      "import": "./dist/core/hmr.js",
+      "require": "./dist/core/hmr.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -55,6 +70,7 @@
     "render:showcase": "node render/render-showcase.mjs",
     "render:audio": "node render/render-audio.mjs",
     "render:animation": "node render/render-animation.mjs",
+    "render:features": "node render/render-features.mjs",
     "render:timeline": "node render/render-timeline.mjs",
     "render:voiceover": "node render/render-voiceover.mjs",
     "demo": "vite demo --open",

@@ -16,6 +16,7 @@ export {
   TimeDisplay,
   TimelineBar,
   VolumeControl,
+  ExportButton,
 } from './react/headless/Primitives';
 export type {
   PlayPauseButtonProps,
@@ -26,7 +27,21 @@ export type {
   TimelineBarRenderProps,
   VolumeControlProps,
   VolumeControlRenderProps,
+  ExportButtonProps,
+  ExportButtonRenderProps,
 } from './react/headless/Primitives';
+
+export {
+  exportBrowserVideo,
+  downloadExportBlob,
+  supportsBrowserExport,
+  muxWebm,
+} from './export/browser-export';
+export type {
+  BrowserExportOptions,
+  BrowserExportCodec,
+  ExportProgress,
+} from './export/browser-export';
 
 export { takeContainerSnapshot } from './sandbox/snapshot';
 export type { SnapshotOptions } from './sandbox/snapshot';

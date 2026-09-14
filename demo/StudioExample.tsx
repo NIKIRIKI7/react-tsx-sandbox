@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { ReactNode } from 'react';
 import * as Remotion from 'remotion';
+import { Camera, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { PlayerSandbox } from '../src/player';
 import type { PlayerSandboxRef } from '../src/player';
+import './styles.css';
 
 const STUDIO_CODE = [
   "import React from 'react';",
@@ -27,12 +29,14 @@ const STUDIO_CODE = [
   '}',
 ].join('\n');
 
-const panel: CSSProperties = {
-  background: '#111726',
-  border: '1px solid #222d42',
-  borderRadius: 10,
-  padding: 16,
-};
+/** Ограничивает 9:16-плеер по высоте, чтобы он не растягивал страницу. */
+function PlayerViewport({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-center rounded-xl bg-black/60 px-4 py-6 ring-1 ring-inset ring-slate-800">
+      <div className="aspect-[9/16] h-[64vh] min-h-[320px] max-h-[720px]">{children}</div>
+    </div>
+  );
+}
 
 export function StudioExample() {
   const playerRef = useRef<PlayerSandboxRef>(null);
@@ -50,22 +54,23 @@ export function StudioExample() {
   };
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: 24, display: 'grid', gap: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-5 p-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 style={{ margin: '0 0 4px', fontSize: 22 }}>browser-tsx-sandbox · Studio</h1>
-          <p style={{ margin: 0, color: '#8ea2c9', fontSize: 14 }}>
-            Smart Frame Retention, ref-API, скриншот кадра, safe zones, Ctrl+Wheel зум, headless-контролы.
+          <h1 className="text-xl font-bold text-slate-100">browser-tsx-sandbox · Studio</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-400">
+            Smart Frame Retention, ref-API, скриншот кадра, safe zones, зум и headless-контролы на
+            render props.
           </p>
         </div>
-        <a href="/" style={{ color: '#4fdbc8' }}>
+        <a href="/" className="text-sm text-emerald-400 transition hover:text-emerald-300">
           ← Player demo
         </a>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 16 }}>
-        <section style={panel}>
-          <PlayerSandbox.Root
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+          <PlayerSandbox
             ref={playerRef}
             config={{
               code: STUDIO_CODE,
@@ -79,44 +84,100 @@ export function StudioExample() {
               smartFrameRetention: true,
               delayRenderTimeoutMs: 3500,
               safeZone: ['tiktok-9x16', 'rule-of-thirds'],
-              canvasControls: { enabled: true, minZoom: 0.25, maxZoom: 3, initialZoom: 0.5 },
-              renderLoading: () => <div style={{ padding: 24, color: '#8ea2c9' }}>Compiling…</div>,
+              canvasControls: { enabled: true, minZoom: 0.5, maxZoom: 3, initialZoom: 1 },
+              wrapper: PlayerViewport,
+              renderLoading: () => <div className="p-6 text-sm text-slate-400">Compiling…</div>,
             }}
-            style={{ maxHeight: '70vh' }}
           >
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-              <PlayerSandbox.PlayButton
-                style={{ padding: '8px 16px', background: '#4fdbc8', color: '#06231d', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <PlayerSandbox.PlayButton>
+                {({ isPlaying, toggle }) => (
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    aria-label={isPlaying ? 'Pause' : 'Play'}
+                    className="grid h-11 w-11 place-items-center rounded-full bg-emerald-400 text-emerald-950 transition hover:bg-emerald-300 active:scale-95"
+                  >
+                    {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                  </button>
+                )}
+              </PlayerSandbox.PlayButton>
+
+              <PlayerSandbox.TimeDisplay
+                render={({ time, totalTime }) => (
+                  <span className="font-mono text-sm tabular-nums text-slate-300">
+                    {time}
+                    <span className="px-1 text-slate-600">/</span>
+                    {totalTime}
+                  </span>
+                )}
               />
-              <PlayerSandbox.TimeDisplay format="both" style={{ color: '#dae2fd' }} />
-              <PlayerSandbox.Timeline style={{ flex: 1, minWidth: 160 }} />
+
+              <PlayerSandbox.Timeline
+                render={({ currentFrame, durationInFrames, seekTo }) => (
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, durationInFrames - 1)}
+                    value={currentFrame}
+                    onChange={(event) => seekTo(Number(event.target.value))}
+                    aria-label="Timeline"
+                    className="h-2 min-w-[160px] flex-1 cursor-pointer appearance-none rounded-full bg-slate-700 accent-emerald-400"
+                  />
+                )}
+              />
+
+              <PlayerSandbox.VolumeControl
+                render={({ volume, isMuted, toggleMute }) => (
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:bg-slate-800"
+                  >
+                    {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                  </button>
+                )}
+              />
+
               <button
+                type="button"
                 onClick={capture}
-                style={{ padding: '8px 12px', background: '#222d42', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-700"
               >
+                <Camera size={16} />
                 Capture frame
               </button>
             </div>
-          </PlayerSandbox.Root>
+          </PlayerSandbox>
         </section>
 
-        <aside style={panel}>
-          <h3 style={{ marginTop: 0 }}>Poster snapshot</h3>
-          <p style={{ color: '#8899ac', fontSize: 13 }}>status: {status}</p>
+        <aside className="h-fit rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Poster snapshot
+            </h3>
+            <span className="font-mono text-xs text-slate-500">{status}</span>
+          </div>
+
           {snapshot ? (
             snapshot.startsWith('data:image/svg+xml') ? (
               <div
                 data-testid="snapshot-svg"
-                style={{ borderRadius: 6, border: '1px solid #222d42', overflow: 'hidden' }}
+                className="mt-3 max-h-[440px] overflow-hidden rounded-xl border border-slate-800 [&_svg]:h-auto [&_svg]:w-full"
                 dangerouslySetInnerHTML={{
                   __html: decodeURIComponent(snapshot.slice(snapshot.indexOf(',') + 1)),
                 }}
               />
             ) : (
-              <img src={snapshot} alt="Snapshot" style={{ width: '100%', borderRadius: 6, border: '1px solid #222d42' }} />
+              <img
+                src={snapshot}
+                alt="Snapshot"
+                className="mt-3 w-full rounded-xl border border-slate-800"
+              />
             )
           ) : (
-            <p style={{ color: '#8899ac', fontSize: 13 }}>
+            <p className="mt-3 text-sm leading-relaxed text-slate-500">
               Нажми «Capture frame» — PNG текущего кадра берётся прямо из DOM.
             </p>
           )}
