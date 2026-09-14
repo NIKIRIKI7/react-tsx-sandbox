@@ -6,7 +6,7 @@
 
 Это именно тот use-case, который выделяет `browser-tsx-sandbox` от Remotion-проектов:
 - Remotion требует Node + Chrome + `renderMedia` → файл MP4.
-- browser-tsx-sandbox позволяет экспортировать MP4/WebM **прямо в браузере** через WebCodecs (`VideoEncoder`) + `mediabunny`.
+- browser-tsx-sandbox позволяет экспортировать MP4/WebM **прямо в браузере** через WebCodecs (`VideoEncoder`) + встроенные ISO-BMFF/EBML муксеры.
 
 ## 2. Обновлённый StudioExample
 

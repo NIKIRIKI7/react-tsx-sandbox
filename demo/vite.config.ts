@@ -17,7 +17,6 @@ export default defineConfig({
           if (id.includes('sucrase')) return 'vendor-sucrase';
           if (id.includes('remotion') && id.includes('player')) return 'vendor-remotion-player';
           if (id.includes('remotion')) return 'vendor-remotion-core';
-          if (id.includes('mediabunny')) return 'vendor-mediabunny';
           if (id.includes('lucide')) return 'vendor-lucide';
           if (id.includes('react')) return 'vendor-react';
           return 'vendor-utils';

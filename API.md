@@ -111,7 +111,7 @@ const { component, error, errorPhase } = await facade.compile(tsxSource);
 | `extractAssetZip`, `createAssetUrlMap`, `releaseAssetUrls` | ZIP-ассеты |
 | `MusicLayer`, `SFXLayer`, `TrackLayer`, `useActiveCues` | Data-Driven Timeline |
 | `takeContainerSnapshot`, `createRemotionWatchdog`, `cleanupCanvasWebGl` | надёжность плеера |
-| `exportBrowserVideo`, `downloadExportBlob`, `supportsBrowserExport` | MP4/WebM-экспорт через WebCodecs + mediabunny |
+| `exportBrowserVideo`, `downloadExportBlob`, `supportsBrowserExport` | MP4/WebM-экспорт через WebCodecs + встроенные муксеры |
 | `SafeZonesOverlay` | оверлеи safe zones (в экспорт/снимок не попадают) |
 | `PlayerContext`, `usePlayerContext` | состояние плеера |
 | `logger`, `configureLogger` | реактивный логгер (debug/info/warn/error) |
@@ -334,7 +334,7 @@ ref.current?.abortExport();
 
 ### 6.5 Программный экспорт видео
 
-`exportVideo` рендерит плеер в MP4/WebM прямо в браузере (WebCodecs + mediabunny)
+`exportVideo` рендерит плеер в MP4/WebM прямо в браузере (WebCodecs + встроенные ISO-BMFF/EBML муксеры)
 и по умолчанию скачивает файл (`filename: false` — только вернуть `Blob`).
 
 Захват кадра идёт в **реальном разрешении композиции** (по `config.width/height`,
@@ -1134,7 +1134,7 @@ const metadata = extractSceneMetadata(codeString, evaluatedExports, Component);
 
 ### v0.6.0
 - **Плеер:** стабильный `SafeComponent` (без ре-маунта `<Player />`), явные `width/height: 100%` для контейнера и плеера, headless-UI не размонтируется при компиляции/ошибках.
-- **Subpath `./export`:** MP4/WebM-экспорт кадра/видео через WebCodecs + mediabunny (`browser-tsx-sandbox/export`).
+- **Subpath `./export`:** MP4/WebM-экспорт кадра/видео через WebCodecs + встроенные ISO-BMFF/EBML муксеры (`browser-tsx-sandbox/export`).
 - **Subpath `./plugins`:** Tailwind JIT-плагин (`browser-tsx-sandbox/plugins`).
 - **Subpath `./hmr`:** инкрементальная перекомпиляция VFS, HMR без полного сброса (`browser-tsx-sandbox/hmr`).
 - **Фичи-пайплайн:** `render/features.e2e.test.ts` — E2E-рендер новых сцен, `render:features`.

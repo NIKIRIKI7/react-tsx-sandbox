@@ -1,21 +1,16 @@
-import {
-  BufferTarget,
-  CanvasSource,
-  Mp4OutputFormat,
-  Output,
-  WebMOutputFormat,
-  type VideoCodec,
-} from 'mediabunny';
 import { takeContainerSnapshot } from '../sandbox/snapshot';
 import { logger } from '../core/logger';
+import { IsobmffMuxer } from './muxers/isobmff-muxer';
+import { EbmlMuxer } from './muxers/ebml-muxer';
 
 /**
  * Zero-Backend экспорт видео: покадровый захват контейнера плеера
  * и кодирование через WebCodecs (`VideoEncoder`). Мультиплексирование
- * выполняет `mediabunny` — надёжный MP4 (H.264) и WebM (VP8/VP9).
+ * выполняют встроенные лёгкие муксеры (ISO-BMFF / EBML) — без сторонних
+ * зависимостей.
  *
  * Работает только в браузерах с `VideoEncoder` (Chrome, Edge, Firefox 130+,
- * Safari 17.4+). Вернуть `Blob` можно скачать через `downloadExportBlob`.
+ * Safari 16.4+). Вернуть `Blob` можно скачать через `downloadExportBlob`.
  */
 
 export interface ExportProgress {
@@ -27,7 +22,6 @@ export interface ExportProgress {
 
 export type BrowserExportCodec = 'avc' | 'vp8' | 'vp9';
 
-/** Пресеты качества по битам на пиксель (BPP) на каждый кадр. */
 export type ExportQuality = 'low' | 'medium' | 'high';
 
 const QUALITY_BPP: Record<ExportQuality, number> = {
@@ -36,10 +30,6 @@ const QUALITY_BPP: Record<ExportQuality, number> = {
   high: 0.2,
 };
 
-/**
- * Считает целевой битрейт из разрешения/частоты кадров и пресета качества.
- * Пример: 1080×1920 @ 30fps → 62 208 000 px/s; high (×0.2) ≈ 12,4 Мбит/с.
- */
 export function calculateBitrate(
   width: number,
   height: number,
@@ -51,21 +41,15 @@ export function calculateBitrate(
 }
 
 export interface BrowserExportOptions {
-  /** DOM-контейнер с игровым кадром (обычно `PlayerSandbox` `containerRef`). */
   container: HTMLElement;
   durationInFrames: number;
   fps: number;
   width: number;
   height: number;
-  /** Переведение плеера в нужный кадр. */
   seekTo: (frame: number) => void;
-  /** Ожидание отрисовки кадра (по умолчанию два rAF + `frameDelayMs`). */
   waitRender?: () => Promise<void>;
-  /** `avc` — MP4 (H.264, по умолчанию), `vp8`/`vp9` — WebM. */
   codec?: BrowserExportCodec;
-  /** Пресет качества. По умолчанию `'high'`. */
   quality?: ExportQuality;
-  /** Битрейт видео в битах/с; приоритетнее `quality`. */
   bitrate?: number;
   frameDelayMs?: number;
   onProgress?: (progress: ExportProgress) => void;
@@ -78,10 +62,6 @@ function assertWebCodecs(): void {
   }
 }
 
-/**
- * MP4 (H.264) через WebCodecs требует чётных размеров кадра — округляем
- * в меньшую сторону до ближайшего чётного, но не меньше 2.
- */
 export function toEvenFrameSize(value: number): number {
   return Math.max(2, value - (value % 2));
 }
@@ -89,13 +69,16 @@ export function toEvenFrameSize(value: number): number {
 function defaultWaitRender(frameDelayMs: number): () => Promise<void> {
   return async () => {
     if (typeof requestAnimationFrame === 'function') {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
     }
-    if (frameDelayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, frameDelayMs));
+    if (frameDelayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, frameDelayMs));
+    }
   };
 }
 
-/** Декодирует data-URL кадра и рисует его в canvas, из которого читает `CanvasSource`. */
 function drawDataUrlToCanvas(
   dataUrl: string,
   canvas: HTMLCanvasElement,
@@ -119,12 +102,16 @@ function drawDataUrlToCanvas(
   });
 }
 
-/**
- * Рендерит плеер в `.mp4`/`.webm` прямо в браузере.
- *
- * Возвращает `Blob` готового видео. Дальше его можно скачать
- * `downloadExportBlob(blob)` или использовать как угодно (ObjectURL, fetch...).
- */
+function resolveCodecString(codec: BrowserExportCodec, width: number, height: number): string {
+  if (codec === 'vp8') return 'vp8';
+  if (codec === 'vp9') return 'vp09.00.41.08';
+
+  const pixels = width * height;
+  if (pixels <= 1280 * 720) return 'avc1.42001f';
+  if (pixels <= 1920 * 1080) return 'avc1.4d002a';
+  return 'avc1.640033';
+}
+
 export async function exportBrowserVideo(options: BrowserExportOptions): Promise<Blob> {
   assertWebCodecs();
 
@@ -146,52 +133,82 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
     throw new Error('Export: durationInFrames и fps должны быть положительными.');
   }
 
-  logger.info('Экспорт видео: настройки', {
-    width,
-    height,
-    fps,
-    codec,
-    quality,
-    bitrate: options.bitrate ?? calculateBitrate(width, height, fps, quality),
-    frames: durationInFrames,
-  });
-
-  // H.264/AVC требует чётных размеров кадра — округляем в меньшую сторону.
-  const normalizedWidth = toEvenFrameSize(width);
-  const normalizedHeight = toEvenFrameSize(height);
-
-  // Целевой битрейт: явный `bitrate` важнее пресета качества.
-  const bitrate = options.bitrate ?? calculateBitrate(width, height, fps, quality);
-
-  const waitRender = options.waitRender ?? defaultWaitRender(frameDelayMs);
-
   if (signal?.aborted) {
     throw new DOMException('Export aborted', 'AbortError');
   }
 
-  const videoCodec: VideoCodec = codec;
-  const format = codec === 'avc' ? new Mp4OutputFormat() : new WebMOutputFormat();
-  const target = new BufferTarget();
-  const output = new Output({ format, target });
+  const normalizedWidth = toEvenFrameSize(width);
+  const normalizedHeight = toEvenFrameSize(height);
+  const bitrate = options.bitrate ?? calculateBitrate(width, height, fps, quality);
+  const waitRender = options.waitRender ?? defaultWaitRender(frameDelayMs);
+
+  logger.info('Экспорт видео: старт автономного пайплайна', {
+    width: normalizedWidth,
+    height: normalizedHeight,
+    fps,
+    codec,
+    quality,
+    bitrate,
+    frames: durationInFrames,
+  });
 
   const canvas = document.createElement('canvas');
   canvas.width = normalizedWidth;
   canvas.height = normalizedHeight;
 
-  const videoSource = new CanvasSource(canvas, {
-    codec: videoCodec,
-    bitrate,
-    keyFrameInterval: Math.max(1, Math.round(fps * 2)),
-  });
-  output.addVideoTrack(videoSource);
+  const isMp4 = codec === 'avc';
+  const mp4Muxer = isMp4
+    ? new IsobmffMuxer({ width: normalizedWidth, height: normalizedHeight, fps })
+    : null;
+  const webmMuxer = !isMp4
+    ? new EbmlMuxer({ width: normalizedWidth, height: normalizedHeight, fps, codec })
+    : null;
 
-  const secondsPerFrame = 1 / fps;
+  const microsecondsPerFrame = Math.round(1_000_000 / fps);
+
+  let encoderError: Error | null = null;
+
+  const encoder = new (globalThis as any).VideoEncoder({
+    output: (chunk: any, metadata?: any) => {
+      const chunkData = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(chunkData);
+
+      const isKeyframe = chunk.type === 'key';
+      const timestampSec = chunk.timestamp / 1_000_000;
+
+      if (isMp4 && mp4Muxer) {
+        if (metadata?.decoderConfig?.description) {
+          const desc = new Uint8Array(metadata.decoderConfig.description);
+          mp4Muxer.setDecoderDescription(desc);
+        }
+        mp4Muxer.addSample(chunkData, isKeyframe, 1 / fps);
+      } else if (webmMuxer) {
+        webmMuxer.addSample(chunkData, isKeyframe, timestampSec);
+      }
+    },
+    error: (err: any) => {
+      encoderError = err instanceof Error ? err : new Error(String(err));
+      logger.error('Ошибка WebCodecs VideoEncoder', err);
+    },
+  });
+
+  const codecString = resolveCodecString(codec, normalizedWidth, normalizedHeight);
+  encoder.configure({
+    codec: codecString,
+    width: normalizedWidth,
+    height: normalizedHeight,
+    bitrate,
+    framerate: fps,
+    hardwareAcceleration: 'no-preference',
+    avc: isMp4 ? { format: 'avc' } : undefined,
+  });
+
+  const keyFrameInterval = Math.max(1, Math.round(fps * 2));
 
   try {
-    await output.start();
-
     for (let frame = 0; frame < durationInFrames; frame++) {
       if (signal?.aborted) throw new DOMException('Export aborted', 'AbortError');
+      if (encoderError) throw encoderError;
 
       seekTo(frame);
       await waitRender();
@@ -203,11 +220,13 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
       });
       await drawDataUrlToCanvas(dataUrl, canvas, normalizedWidth, normalizedHeight);
 
-      await videoSource.add(frame * secondsPerFrame, secondsPerFrame);
+      const videoFrame = new (globalThis as any).VideoFrame(canvas, {
+        timestamp: frame * microsecondsPerFrame,
+        duration: microsecondsPerFrame,
+      });
 
-      if (frame % 25 === 0) {
-        logger.debug('Экспорт: кадр', { frame, total: durationInFrames });
-      }
+      encoder.encode(videoFrame, { keyFrame: frame % keyFrameInterval === 0 });
+      videoFrame.close();
 
       onProgress?.({
         frame,
@@ -217,24 +236,48 @@ export async function exportBrowserVideo(options: BrowserExportOptions): Promise
       });
     }
 
-    onProgress?.({ frame: durationInFrames, totalFrames: durationInFrames, progress: 1, phase: 'muxing' });
-    await output.finalize();
+    onProgress?.({
+      frame: durationInFrames,
+      totalFrames: durationInFrames,
+      progress: 1,
+      phase: 'encoding',
+    });
+
+    await encoder.flush();
+    encoder.close();
+
+    if (encoderError) throw encoderError;
+
+    onProgress?.({
+      frame: durationInFrames,
+      totalFrames: durationInFrames,
+      progress: 1,
+      phase: 'muxing',
+    });
+
+    const resultBlob = isMp4 ? mp4Muxer!.finalize() : webmMuxer!.finalize();
+
+    onProgress?.({
+      frame: durationInFrames,
+      totalFrames: durationInFrames,
+      progress: 1,
+      phase: 'done',
+    });
+
+    logger.info('Экспорт успешно завершён', {
+      size: resultBlob.size,
+      mimeType: resultBlob.type,
+    });
+
+    return resultBlob;
   } catch (error) {
     try {
-      await output.cancel();
-    } catch {
-      // Ошибка отмены не критична — главную ошибку пробрасываем дальше.
-    }
+      if (encoder.state !== 'closed') encoder.close();
+    } catch {}
     throw error;
   }
-
-  const buffer = target.buffer ?? new ArrayBuffer(0);
-  const blob = new Blob([buffer], { type: format.mimeType });
-  onProgress?.({ frame: durationInFrames, totalFrames: durationInFrames, progress: 1, phase: 'done' });
-  return blob;
 }
 
-/** Скачивает полученный Blob как файл; расширение подставляется по типу. */
 export function downloadExportBlob(blob: Blob, filename?: string): void {
   const ext = blob.type.includes('webm') ? 'webm' : 'mp4';
   const name = filename ?? `sandbox-export-${Date.now()}.${ext}`;
@@ -246,7 +289,6 @@ export function downloadExportBlob(blob: Blob, filename?: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** Проверка поддержки WebCodecs экспорта в текущем браузере. */
 export function supportsBrowserExport(): boolean {
   return typeof (globalThis as any).VideoEncoder !== 'undefined';
 }
