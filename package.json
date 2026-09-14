@@ -1,6 +1,6 @@
 {
   "name": "browser-tsx-sandbox",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Pure client-side TSX compiler and sandbox evaluator with dynamic NPM library loading.",
   "type": "module",
   "license": "MIT",
