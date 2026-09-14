@@ -1123,8 +1123,6 @@ const metadata = extractSceneMetadata(codeString, evaluatedExports, Component);
 ### v0.8.0
 - **Scene Metadata:** автоматическое извлечение `durationInFrames`/`fps`/`width`/`height`/`defaultProps` из
   `compositionConfig`/`config`/`sceneConfig`/`metadata` экспортов, статики компонента, `<Composition>` в коде и JSON (прямой + Vidora `widgets[]`). Deafults для JSON-сцен: 300 кадров, 30 fps, 1080×1920. `<PlayerSandbox>` применяет metadata-фолбэки если пропсы не указаны.
-
-### v0.7.0
 - **Чистый кадр для вертикальных платформ:** снимок/экспорт пишут только композицию
   (`data-remotion-canvas`, точный 1:1 без UI-масштаба); safe-zone оверлеи, `<audio>/<video>`
   вырезаются из кадра, CSS страницы инъектируется в `foreignObject`.
