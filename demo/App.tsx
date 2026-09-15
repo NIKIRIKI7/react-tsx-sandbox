@@ -5,7 +5,7 @@ import * as Remotion from 'remotion';
 import * as ReactDOM from 'react-dom';
 import * as Lucide from 'lucide-react';
 import { PlayerSandbox } from '../src/player';
-import { createTailwindJitPlugin } from '../src/plugins/tailwind-plugin';
+import { createTailwindPlugin } from '../src/plugins/tailwind-plugin';
 import {
   configureLogger,
   defaultImporter,
@@ -173,7 +173,7 @@ export function App() {
   const logId = useRef(0);
   const logsRef = useRef<HTMLDivElement | null>(null);
 
-  const plugins = useMemo(() => [createTailwindJitPlugin()], []);
+  const plugins = useMemo(() => [createTailwindPlugin()], []);
 
   useEffect(() => {
     configureLogger({ enabled: true, level: 'debug' });

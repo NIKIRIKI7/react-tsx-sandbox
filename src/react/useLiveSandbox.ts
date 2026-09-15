@@ -4,6 +4,7 @@ import { HmrEvent, ModuleRegistry, VirtualFileSystem } from '../core/types';
 import { RuntimeRenderError } from '../core/errors';
 import * as React from 'react';
 import type { SceneMetadata } from '../core/scene-metadata';
+import { computeVfsHashes, hashString } from '../core/hash';
 
 export interface CompiledComponentInfo {
   component: React.ComponentType<any>;
@@ -71,8 +72,9 @@ export function useLiveSandbox(
   const [lastHmr, setLastHmr] = useState<HmrEvent | null>(null);
   const [metadata, setMetadata] = useState<SceneMetadata | undefined>(undefined);
 
-  const inputKey = typeof codeOrFiles === 'string' ? codeOrFiles : JSON.stringify(codeOrFiles);
-  const assetsKey = JSON.stringify(localAssets ?? {});
+  const inputKey =
+    typeof codeOrFiles === 'string' ? codeOrFiles : computeVfsHashes(codeOrFiles).rootHash;
+  const assetsKey = hashString(JSON.stringify(localAssets ?? {}));
   const debounceMs = options.debounceMs ?? 0;
 
   useEffect(() => {

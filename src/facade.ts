@@ -16,11 +16,19 @@ import { getErrorPhase } from './core/errors';
 import { extractBareImports, scanImports, resolveVfsPath } from './compiler/analyzer';
 import { injectLoopProtection } from './compiler/loop-protect';
 import { compileTsx } from './compiler/transform';
-import { buildImportsGraph, getDependents } from './core/hmr';
+import {
+  buildDependencyGraph,
+  diffFilesWithHashes,
+  getAffectedDependents,
+} from './core/hmr';
+import { computeVfsHashes } from './core/hash';
 import { ModuleCache } from './library-manager/cache';
 import { loadMissingModules, ModuleImporter } from './library-manager/loader';
 import { executeComponent } from './sandbox/evaluator';
 import { extractSceneMetadata } from './core/scene-metadata';
+import { CancellationToken, RenderResourceManager } from './core/lifecycle';
+import { RawSourceMapConsumer, remapStackTrace } from './core/diagnostics';
+import { PluginPipeline, SandboxPlugin, TAILWIND_VIRTUAL_MODULE } from './core/plugin';
 
 export interface SandboxFacadeOptions {
   compiler?: CompilerAdapter;
@@ -28,12 +36,17 @@ export interface SandboxFacadeOptions {
   importer?: ModuleImporter;
   loopProtect?: boolean;
   maxIterations?: number;
-  plugins?: PipelinePlugin[];
+  /** Плагины: классические PipelinePlugin (before/after) или SandboxPlugin (onResolve/onLoad). */
+  plugins?: (PipelinePlugin | SandboxPlugin)[];
 }
 
 /** Является ли файл компилируемым исходником (TS/TSX/JS/JSX). JSON и прочие ресурсы не компилируются. */
 function isCodeFile(filepath: string): boolean {
   return /\.([cm]?[jt]sx?)$/.test(filepath);
+}
+
+function isSandboxPlugin(plugin: PipelinePlugin | SandboxPlugin): plugin is SandboxPlugin {
+  return typeof (plugin as SandboxPlugin).setup === 'function';
 }
 
 export class SandboxFacade {
@@ -45,9 +58,13 @@ export class SandboxFacade {
   private loopProtect: boolean;
   private maxIterations: number;
   private plugins: PipelinePlugin[];
+  private pipeline: PluginPipeline;
+  private resourceManager = new RenderResourceManager();
+  private sourceMaps = new Map<string, RawSourceMapConsumer>();
   private hmrState:
     | {
         lastVfs: VirtualFileSystem;
+        fileHashes: Map<string, string>;
         processed: Record<string, string>;
         compiled: Record<string, string>;
       }
@@ -66,7 +83,9 @@ export class SandboxFacade {
     this.importer = options.importer;
     this.loopProtect = options.loopProtect ?? true;
     this.maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
-    this.plugins = options.plugins ?? [];
+    const allPlugins = options.plugins ?? [];
+    this.plugins = allPlugins.filter((p) => !isSandboxPlugin(p)) as PipelinePlugin[];
+    this.pipeline = new PluginPipeline(allPlugins.filter(isSandboxPlugin));
   }
 
   public setAssets(assets: Record<string, string>): void {
@@ -110,13 +129,16 @@ export class SandboxFacade {
     options: CompileOptions = {},
   ): Promise<EvaluationResult> {
     const start = performance.now();
-    const signal = options.signal;
+    const token = CancellationToken.fromSignal(options.signal);
     const entry = options.entry ?? DEFAULT_ENTRY;
 
     const vfs: VirtualFileSystem = typeof input === 'string' ? { [entry]: input } : { ...input };
+    const renderId = this.resourceManager.nextRenderId();
+    token.onCancel(() => this.resourceManager.disposeRender(renderId));
 
     try {
-      if (signal?.aborted) throw new DOMException('Compilation aborted', 'AbortError');
+      token.throwIfCancelled();
+      await this.pipeline.init(options);
 
       // 1. Plugin beforeCompile + loop protection + сбор внешних зависимостей
       const bareImports = new Set<string>();
@@ -131,23 +153,57 @@ export class SandboxFacade {
         for (const pkg of extractBareImports(code)) bareImports.add(pkg);
       }
 
-      // 2. Загрузка отсутствующих пакетов (NPM/CDN)
-      await loadMissingModules([...bareImports], this.cache, {
-        importer: this.importer,
-        cdnResolver: this.cdnResolver,
-        signal,
-      });
-
-      if (signal?.aborted) throw new DOMException('Compilation aborted', 'AbortError');
-
-      // 3. Транспиляция файлов
-      const compiledVfs: Record<string, string> = {};
-
-      for (const [filepath, code] of Object.entries(processed)) {
-        compiledVfs[filepath] = await this.transformCode(code, filepath);
+      // Автоматическое подключение Tailwind: если плагин резолвит virtual:tailwind.css,
+      // дописываем импорт в точку входа — пользователю не нужно импортировать его вручную.
+      if (!bareImports.has(TAILWIND_VIRTUAL_MODULE)) {
+        const twResolve = await this.pipeline.runResolve(TAILWIND_VIRTUAL_MODULE, entry);
+        if (twResolve.namespace && twResolve.namespace !== 'file') {
+          const entryCode = processed[entry] ?? '';
+          if (!entryCode.includes(TAILWIND_VIRTUAL_MODULE)) {
+            processed[entry] = `import '${TAILWIND_VIRTUAL_MODULE}';\n${entryCode}`;
+          }
+          bareImports.add(TAILWIND_VIRTUAL_MODULE);
+        }
       }
 
-      // 4. Выполнение в изолированной области
+      token.throwIfCancelled();
+
+      // 2. Виртуальные модули через onResolve/onLoad плагины (CSS, asset, text).
+      const virtualCompiled: Record<string, string> = {};
+      for (const specifier of [...bareImports]) {
+        const resolved = await this.pipeline.runResolve(specifier, entry);
+        if (resolved.namespace && resolved.namespace !== 'file') {
+          const data = await this.pipeline.runLoad(resolved.path ?? specifier, resolved.namespace, vfs);
+          if (data) {
+            virtualCompiled[specifier] = data.loader === 'css' || data.loader === 'text'
+              ? `module.exports = ${JSON.stringify(data.contents)};`
+              : data.contents;
+          }
+        }
+      }
+
+      // 3. Загрузка отсутствующих пакетов (NPM/CDN)
+      const realBareImports = [...bareImports].filter((pkg) => !virtualCompiled[pkg]);
+      await loadMissingModules(realBareImports, this.cache, {
+        importer: this.importer,
+        cdnResolver: this.cdnResolver,
+        signal: options.signal,
+      });
+
+      token.throwIfCancelled();
+
+      // 4. Транспиляция файлов
+      const compiledVfs: Record<string, string> = { ...virtualCompiled };
+      this.sourceMaps.clear();
+
+      for (const [filepath, code] of Object.entries(processed)) {
+        const compiled = await this.transformCode(code, filepath);
+        compiledVfs[filepath] = compiled;
+        // Идентичная карта: сгенерированная строка соответствует исходной 1:1.
+        this.sourceMaps.set(filepath, new RawSourceMapConsumer({ sources: [filepath], mappings: 'AAAA;' }));
+      }
+
+      // 5. Выполнение в изолированной области
       const globals = this.buildGlobals();
 
       const component = executeComponent(compiledVfs[entry], {
@@ -167,8 +223,17 @@ export class SandboxFacade {
         metadata,
         exports: rootExports,
       };
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
+    } catch (rawError) {
+      const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+
+      if (err.stack) {
+        try {
+          err.stack = remapStackTrace(err.stack, this.sourceMaps, vfs);
+        } catch {
+          // Ремаппинг диагностики не должен маскировать исходную ошибку.
+        }
+      }
+
       return {
         component: null,
         error: err,
@@ -192,13 +257,14 @@ export class SandboxFacade {
     options: CompileOptions = {},
   ): Promise<HmrUpdateResult> {
     const start = performance.now();
-    const signal = options.signal;
+    const token = CancellationToken.fromSignal(options.signal);
     const entry = options.entry ?? DEFAULT_ENTRY;
     const vfs: VirtualFileSystem = { ...input };
     const hmr: HmrEvent = { changed: [], added: [], removed: [], recompiled: [], kept: [] };
 
     try {
-      if (signal?.aborted) throw new DOMException('Compilation aborted', 'AbortError');
+      token.throwIfCancelled();
+      await this.pipeline.init(options);
 
       const previous = this.hmrState;
 
@@ -220,12 +286,25 @@ export class SandboxFacade {
           for (const pkg of extractBareImports(code)) bareImports.add(pkg);
         }
 
-        if (signal?.aborted) throw new DOMException('Compilation aborted', 'AbortError');
+        // Автоматическое подключение Tailwind (см. compile).
+        if (!bareImports.has(TAILWIND_VIRTUAL_MODULE)) {
+          const twResolve = await this.pipeline.runResolve(TAILWIND_VIRTUAL_MODULE, entry);
+          if (twResolve.namespace && twResolve.namespace !== 'file') {
+            const entryCode = processed[entry] ?? '';
+            if (!entryCode.includes(TAILWIND_VIRTUAL_MODULE)) {
+              processed[entry] = `import '${TAILWIND_VIRTUAL_MODULE}';\n${entryCode}`;
+              compiledVfs[entry] = await this.transformCode(processed[entry], entry);
+            }
+            bareImports.add(TAILWIND_VIRTUAL_MODULE);
+          }
+        }
+
+        token.throwIfCancelled();
 
         await loadMissingModules([...bareImports], this.cache, {
           importer: this.importer,
           cdnResolver: this.cdnResolver,
-          signal,
+          signal: options.signal,
         });
 
         const component = executeComponent(compiledVfs[entry], {
@@ -235,7 +314,8 @@ export class SandboxFacade {
           entryPath: entry,
         });
 
-        this.hmrState = { lastVfs: vfs, processed, compiled: compiledVfs };
+const firstHashes = computeVfsHashes(vfs).fileHashes;
+        this.hmrState = { lastVfs: vfs, fileHashes: firstHashes, processed, compiled: compiledVfs };
 
         const rootExports1 = (component as any)?.__moduleExports;
         const metadata1 = extractSceneMetadata(vfs, rootExports1, component);
@@ -243,30 +323,28 @@ export class SandboxFacade {
         return { component, error: null, executionTimeMs: performance.now() - start, hmr, metadata: metadata1, exports: rootExports1 };
       }
 
-      // Инкрементальный путь: дифф + граф зависимостей
-      const changedSet = new Set<string>();
-      for (const [filepath, content] of Object.entries(vfs)) {
-        if (!Object.prototype.hasOwnProperty.call(previous.lastVfs, filepath)) {
-          hmr.added.push(filepath);
-          changedSet.add(filepath);
-        } else if (previous.lastVfs[filepath] !== content) {
-          hmr.changed.push(filepath);
-          changedSet.add(filepath);
-        }
-      }
-      for (const filepath of Object.keys(previous.lastVfs)) {
-        if (!Object.prototype.hasOwnProperty.call(vfs, filepath)) hmr.removed.push(filepath);
-      }
+      // Инкрементальный путь: хэш-дифф + граф зависимостей
+      const { changes, newHashes } = diffFilesWithHashes(
+        previous.lastVfs,
+        vfs,
+        previous.fileHashes,
+      );
+      hmr.changed = changes.changed;
+      hmr.added = changes.added;
+      hmr.removed = changes.removed;
 
-      if (signal?.aborted) throw new DOMException('Compilation aborted', 'AbortError');
+      token.throwIfCancelled();
 
-      const nextGraph = buildImportsGraph(
+      const nextGraph = buildDependencyGraph(
         vfs,
         (code) => scanImports(code).localImports,
-        resolveVfsPath
+        resolveVfsPath,
       );
-      
-      const affected = getDependents([...changedSet, ...hmr.removed], nextGraph);
+
+      const affected = getAffectedDependents(
+        [...changes.changed, ...changes.removed, ...changes.added],
+        nextGraph,
+      );
       const recompileSet = new Set(
         affected.filter(
           (filepath) =>
@@ -295,10 +373,26 @@ export class SandboxFacade {
       for (const code of Object.values(processed)) {
         for (const pkg of extractBareImports(code)) bareImports.add(pkg);
       }
+
+      // Перегенерируем виртуальные модули (Tailwind CSS) — классы могли измениться.
+      for (const specifier of [...bareImports]) {
+        if (Object.prototype.hasOwnProperty.call(compiledVfs, specifier)) {
+          const resolved = await this.pipeline.runResolve(specifier, entry);
+          if (resolved.namespace && resolved.namespace !== 'file') {
+            const data = await this.pipeline.runLoad(resolved.path ?? specifier, resolved.namespace, vfs);
+            if (data) {
+              compiledVfs[specifier] = data.loader === 'css' || data.loader === 'text'
+                ? `module.exports = ${JSON.stringify(data.contents)};`
+                : data.contents;
+            }
+          }
+        }
+      }
+
       await loadMissingModules([...bareImports], this.cache, {
         importer: this.importer,
         cdnResolver: this.cdnResolver,
-        signal,
+        signal: options.signal,
       });
 
       const component = executeComponent(compiledVfs[entry], {
@@ -308,7 +402,7 @@ export class SandboxFacade {
         entryPath: entry,
       });
 
-      this.hmrState = { lastVfs: vfs, processed, compiled: compiledVfs };
+      this.hmrState = { lastVfs: vfs, fileHashes: newHashes, processed, compiled: compiledVfs };
 
       const rootExports2 = (component as any)?.__moduleExports;
       const metadata2 = extractSceneMetadata(vfs, rootExports2, component);
@@ -325,5 +419,11 @@ export class SandboxFacade {
         metadata: extractSceneMetadata(vfs),
       };
     }
+  }
+
+  /** Освобождает все зарегистрированные ресурсы рендера (WebGL/Audio/таймеры). */
+  public dispose(): void {
+    this.resourceManager.disposeAll();
+    this.cache.clear();
   }
 }

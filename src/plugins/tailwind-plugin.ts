@@ -1,26 +1,25 @@
 import { compile } from 'tailwindcss';
 import postcss from 'postcss';
-import type { PipelinePlugin } from '../core/types';
+import { JsScanner, TokenType } from '../compiler/scanner';
+import { SandboxPlugin, PluginBuild, OnLoadArgs, TAILWIND_VIRTUAL_MODULE } from '../core/plugin';
+import type { VirtualFileSystem } from '../core/types';
+import { logger } from '../core/logger';
 
 /**
- * Scoped Tailwind JIT на официальном программном API Tailwind CSS v4.
+ * Scoped Tailwind JIT на официальном программном API Tailwind CSS v4,
+ * спроектированный по модели плагинов esbuild `onResolve` / `onLoad`.
  *
- * В v4 движок больше не использует PostCSS-плагин и параметр `content`. Пакет
- * `tailwindcss` напрямую экспортирует асинхронный компилятор `compile(inputCss,
- * { loadStylesheet })`, который возвращает экземпляр с методом
- * `build(candidates)`, генерирующим точный срез CSS только для переданных
- * токенов (классов, включая arbitrary-значения, современные цветовые
- * пространства OKLCH и градиенты).
- *
- * Плагин сканирует исходник файла на Tailwind-кандидаты, прогоняет их через
- * `compiler.build(candidates)` и оборачивает компонент в `<div className={scope}>`
- * с собственным `<style>`. Через `scopeCss` переменные темы (`:root, :host`)
- * привязываются к классу области, а правила утилит префиксуются
- * `.${scopeClass} .utility` — стили песочницы не «протекают» наружу.
- * `@keyframes` при этом остаются глобальными.
+ * Компонент может объявлять `import "virtual:tailwind.css"` (или фасад подключит
+ * его автоматически). Плагин перехватывает этот импорт через `onResolve`
+ * (namespace `tailwind-virtual`), а в `onLoad` собирает Tailwind-кандидатов из
+ * строковых токенов всех файлов VFS и отдаёт готовый JS-модуль, инжектирующий
+ * `<style>` с scoped CSS. Никаких текстовых wrapper-ов вокруг скомпилированного
+ * React-кода больше нет.
  */
 
 export const TAILWIND_SCOPE = '__tsx_tw';
+export { TAILWIND_VIRTUAL_MODULE } from '../core/plugin';
+const TAILWIND_NAMESPACE = 'tailwind-virtual';
 
 export interface TailwindJitPluginOptions {
   /** Имя плагина. По умолчанию `tailwind-jit`. */
@@ -37,8 +36,7 @@ export interface TailwindJitPluginOptions {
 
 // ---- Кэши ----------------------------------------------------------------
 // `compilerCache` хранит скомпилированные дизайн-системы (экземпляры компилятора),
-// `cssCache` — готовый scoped CSS. Кэши ограничены (LRU поверх Map), чтобы при
-// HMR/ре-рендерах повторно компилировать только реально изменившиеся связки.
+// `cssCache` — готовый scoped CSS. Кэши ограничены (LRU поверх Map).
 
 const COMPILER_CACHE_LIMIT = 20;
 const compilerCache = new Map<string, Promise<{ build(candidates: string[]): string }>>();
@@ -61,8 +59,7 @@ function cacheCss(key: string, css: string): string {
  *
  * В среде Node.js импорты разрешаются через `createRequire`, в браузере —
  * fallback на CDN (jsDelivr). Ветка Node активируется только при наличии
- * `process.versions.node`, поэтому модуль безопасно импортировать в браузере:
- * зависимости `node:*` запрашиваются лениво, внутри загрузчика.
+ * `process.versions.node`, поэтому модуль безопасно импортировать в браузере.
  */
 async function defaultLoadStylesheet(
   id: string,
@@ -120,16 +117,18 @@ async function defaultLoadStylesheet(
  * Изолирует сгенерированный Tailwind v4 CSS внутри селектора scopeClass.
  *
  * Переменные темы объявляются в v4 на `:root, :host` — они переносятся на
- * `.${scopeClass}`, чтобы стили песочницы не утекали наружу и не ломали
- * плеер/хост. Правила утилит префиксуются `.${scopeClass} .utility`.
- * `@keyframes` остаются глобальными.
+ * `.${scopeClass}`, чтобы стили песочницы не утекали наружу. Правила утилит
+ * префиксуются `.${scopeClass} .utility`. `@keyframes` остаются глобальными.
  */
 export function scopeCss(rawCss: string, scopeClass: string): string {
   const root = postcss.parse(rawCss);
-  const selectorScope = `.${scopeClass}`;
+  const cleanScope = scopeClass.replace(/^\./, '');
+  // Базовый класс скоупа: '__tsx_tw' (без хэш-суффикса) — плеер всегда вешает его на canvas.
+  const baseScope = cleanScope.split('-')[0];
+  const selectorScope = `.${cleanScope}`;
+  const canvasSelector = `[data-remotion-canvas="true"]`;
 
   root.walkRules((rule) => {
-    // Не трогаем ключевые кадры внутри @keyframes (0%, 100%, from, to).
     if (
       rule.parent &&
       rule.parent.type === 'atrule' &&
@@ -140,11 +139,10 @@ export function scopeCss(rawCss: string, scopeClass: string): string {
 
     rule.selectors = rule.selectors.map((sel) => {
       const trimmed = sel.trim();
-      // Переменные темы и базовые свойства переносим на контейнер компонента.
       if (trimmed === ':root' || trimmed === ':host' || trimmed === 'html' || trimmed === 'body') {
-        return selectorScope;
+        return `${selectorScope}, .${baseScope}, ${canvasSelector}`;
       }
-      return `${selectorScope} ${trimmed}`;
+      return `${selectorScope} ${trimmed}, .${baseScope} ${trimmed}, ${canvasSelector} ${trimmed}`;
     });
   });
 
@@ -185,10 +183,9 @@ export function collectTailwindClasses(code: string): string[] {
  * (строковые литералы + className/class). Некорректные токены v4-компилятор
  * просто игнорирует, поэтому избыточность сканера безопасна.
  */
-function extractAllCandidates(source: string): string[] {
+export function extractAllCandidates(source: string): string[] {
   const candidates = new Set<string>();
 
-  // Сканируем строковые литералы (в объектах, массивах, пропсах).
   const stringLiteralRe = /(["'`])((?:\\.|[^\\])*?)\1/g;
   let match: RegExpExecArray | null;
   while ((match = stringLiteralRe.exec(source)) !== null) {
@@ -202,12 +199,51 @@ function extractAllCandidates(source: string): string[] {
   return Array.from(candidates).sort();
 }
 
+/**
+ * Токенный экстрактор Tailwind-кандидатов: обходит исходник через `JsScanner`,
+ * собирая классы только из строковых литералов и NoSubstitutionTemplate.
+ * В отличие от регулярного подхода, строки внутри комментариев, ключевые
+ * слова и JSX-разметка не дают ложных срабатываний.
+ */
+export function extractClassNamesFromSource(source: string): string[] {
+  const scanner = new JsScanner(source);
+  const candidates = new Set<string>();
+
+  let token = scanner.nextToken(true);
+  while (token.type !== TokenType.EOF) {
+    if (token.type === TokenType.StringLiteral || token.type === TokenType.NoSubstitutionTemplate) {
+      const raw = token.value.slice(1, -1);
+      for (const part of raw.split(/\s+/)) {
+        const trimmed = part.trim();
+        if (trimmed.length > 1 && !trimmed.includes('\n')) {
+          candidates.add(trimmed);
+        }
+      }
+    }
+    token = scanner.nextToken(token.type === TokenType.Punctuator);
+  }
+
+  return Array.from(candidates).sort();
+}
+
+/**
+ * Собирает кандидатов из всех файлов VFS через токенный сканер.
+ */
+function collectCandidatesFromVfs(vfs: VirtualFileSystem): string[] {
+  const candidates = new Set<string>();
+  for (const code of Object.values(vfs)) {
+    for (const cls of extractClassNamesFromSource(code)) {
+      candidates.add(cls);
+    }
+  }
+  return Array.from(candidates).sort();
+}
+
 function extractTokens(str: string, target: Set<string>): void {
   for (const token of str.split(/\s+/)) {
     const trimmed = token.trim();
     if (!trimmed || trimmed.length < 2) continue;
     if (trimmed.includes('${')) continue;
-    // Незавершённые токены (например, `p-` из интерполированного `p-${size}`).
     if (trimmed.endsWith('-')) continue;
     if (trimmed.includes('/') && !trimmed.match(/^[\w-]+(?:\/[\w.%-]+)+$/)) continue;
     if (!/^[\w/:.%.\-\[\]#!]+$/.test(trimmed)) continue;
@@ -282,75 +318,6 @@ export async function scopedTailwindCss(
 
 // ---- Плагин --------------------------------------------------------------
 
-/**
- * Создаёт плагин конвейера для scoped Tailwind JIT (v4).
- *
- * Каждый файл оборачивается в `<div className={scope}>` со своим `<style>`,
- * поэтому классы песочницы не влияют на UI хоста. Кэш дизайн-системы
- * переиспользуется между компиляциями: только `build(candidates)` выполняется
- * заново на каждом кадре/изменении кода.
- */
-export function createTailwindJitPlugin(options: TailwindJitPluginOptions = {}): PipelinePlugin {
-  const scope = options.scope ?? TAILWIND_SCOPE;
-  const rawSources = new Map<string, string>();
-  const collected = new Map<string, string[]>();
-
-  return {
-    name: options.name ?? 'tailwind-jit',
-
-    beforeCompile(code: string, filepath: string): string {
-      rawSources.set(filepath, code);
-      collected.set(filepath, collectTailwindClasses(code));
-      return code;
-    },
-
-    async afterCompile(compiledJs: string, filepath: string): Promise<string> {
-      const rawCode = rawSources.get(filepath) ?? compiledJs;
-      const classes = collected.get(filepath) ?? collectTailwindClasses(rawCode);
-      const scopeClass = `${scope}-${Math.abs(hashCode(filepath)).toString(36)}`;
-
-      const css = options.builder
-        ? await options.builder(classes, scopeClass)
-        : await scopedTailwindCss(scopeClass, rawCode, {
-            css: options.css,
-            base: options.base,
-          });
-
-      const jsonCss = JSON.stringify(css);
-      const wrapper = `
-;(function () {
-  var Original = exports.default;
-  if (!Original && typeof exports !== 'undefined') {
-    for (var k in exports) {
-      if (k !== 'default' && k !== '__esModule' && typeof exports[k] === 'function') {
-        Original = exports[k];
-        break;
-      }
-    }
-  }
-  if (!Original || typeof Original !== 'function') return;
-  var scopeCls = ${JSON.stringify(scopeClass)};
-  var injectedCss = ${jsonCss};
-  function TailwindJitWrapper(props) {
-    return React.createElement('div', { className: scopeCls },
-      React.createElement('style', { dangerouslySetInnerHTML: { __html: injectedCss } }),
-      React.createElement(Original, props)
-    );
-  }
-  for (var prop in Original) {
-    if (Object.prototype.hasOwnProperty.call(Original, prop)) {
-      TailwindJitWrapper[prop] = Original[prop];
-    }
-  }
-  TailwindJitWrapper.displayName = 'TailwindJit(${filepath.replace(/[^\w]/g, '_')})';
-  exports.default = TailwindJitWrapper;
-})();
-`;
-      return compiledJs + wrapper;
-    },
-  };
-}
-
 function hashCode(text: string): number {
   let hash = 0;
   for (let i = 0; i < text.length; i++) {
@@ -358,4 +325,118 @@ function hashCode(text: string): number {
     hash |= 0;
   }
   return hash;
+}
+
+/**
+ * Создаёт плагин Tailwind V4 JIT в модели `onResolve` / `onLoad` (esbuild).
+ *
+ * Компонент объявляет `import "virtual:tailwind.css"`. `onResolve` маршрутизирует
+ * импорт в namespace `tailwind-virtual`, `onLoad` генерирует JS-модуль, который
+ * инжектирует `<style data-tailwind-jit>` с scoped CSS и экспортирует CSS-строку.
+ *
+ * Каждый файл песочницы остаётся нетронутым — никаких wrapper-компонентов вокруг
+ * экспортов, никаких текстовых манипуляций со скомпилированным кодом.
+ */
+export function createTailwindPlugin(options: TailwindJitPluginOptions = {}): SandboxPlugin {
+  const scope = options.scope ?? TAILWIND_SCOPE;
+
+  return {
+    name: options.name ?? 'tailwind-jit',
+
+    setup(build: PluginBuild): void {
+      build.onResolve(
+        { filter: /^virtual:tailwind\.css$/, namespace: 'file' },
+        (args) => ({
+          path: args.path,
+          namespace: TAILWIND_NAMESPACE,
+        }),
+      );
+
+      build.onLoad({ filter: /.*/, namespace: TAILWIND_NAMESPACE }, async (args: OnLoadArgs) => {
+        const scopeClass = `${scope}-${Math.abs(hashCode(TAILWIND_VIRTUAL_MODULE)).toString(36)}`;
+        const candidates = args.vfs ? collectCandidatesFromVfs(args.vfs) : [];
+
+        logger.debug('Tailwind JIT: onLoad', {
+          path: args.path,
+          namespace: args.namespace,
+          files: args.vfs ? Object.keys(args.vfs) : [],
+          candidates,
+          candidateCount: candidates.length,
+          scopeClass,
+        });
+
+        let css: string;
+        try {
+          css = options.builder
+            ? await options.builder(candidates, scopeClass)
+            : await scopedTailwindCss(scopeClass, candidates, {
+                css: options.css,
+                base: options.base,
+              });
+        } catch (error) {
+          logger.error('Tailwind JIT: ошибка компиляции CSS', {
+            message: error instanceof Error ? error.message : String(error),
+            candidates,
+            scopeClass,
+          });
+          throw error;
+        }
+
+        logger.debug('Tailwind JIT: CSS сгенерирован', {
+          scopeClass,
+          cssBytes: css.length,
+          cssHead: css.slice(0, 200),
+        });
+
+        // ПРЯМАЯ ИНЪЕКЦИЯ В <head> НА СТОРОНЕ ПЛАГИНА (ВНЕ МЕМБРАНЫ ПЕСОЧНИЦЫ).
+        // Внутри песочницы `document` входит в FORBIDDEN_GLOBALS и равен undefined,
+        // поэтому инъекция из виртуального модуля никогда не сработала бы.
+        if (typeof globalThis !== 'undefined' && globalThis.document?.head) {
+          const hostDoc = globalThis.document;
+          let hostStyle = hostDoc.head.querySelector<HTMLStyleElement>('[data-tailwind-jit]');
+          if (!hostStyle) {
+            hostStyle = hostDoc.createElement('style');
+            hostStyle.setAttribute('data-tailwind-jit', 'true');
+            hostDoc.head.appendChild(hostStyle);
+          }
+          hostStyle.textContent = css;
+          logger.debug('Tailwind JIT: CSS внедрён в <head>', {
+            scopeClass,
+            bytes: css.length,
+          });
+        } else {
+          logger.warn('Tailwind JIT: document недоступен на стороне плагина, инъекция пропущена', {
+            hasGlobalThis: typeof globalThis !== 'undefined',
+            hasDocument: typeof globalThis !== 'undefined' && Boolean(globalThis.document),
+          });
+        }
+
+        const jsonCss = JSON.stringify(css);
+        const scopeCls = JSON.stringify(scopeClass);
+
+        return {
+          loader: 'js',
+          contents: `
+const scopeCls = ${scopeCls};
+const injectedCss = ${jsonCss};
+// Безопасная инъекция через globalThis (на случай отдельного контекста исполнения).
+try {
+  const doc = typeof globalThis !== 'undefined' ? globalThis.document : null;
+  if (doc && doc.head) {
+    let style = doc.head.querySelector('[data-tailwind-jit]');
+    if (!style) {
+      style = doc.createElement('style');
+      style.setAttribute('data-tailwind-jit', 'true');
+      doc.head.appendChild(style);
+    }
+    style.textContent = injectedCss;
+  }
+} catch (_) {}
+module.exports = injectedCss;
+exports.default = injectedCss;
+`,
+        };
+      });
+    },
+  };
 }

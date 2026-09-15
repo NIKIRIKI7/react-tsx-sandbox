@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   collectTailwindClasses,
-  createTailwindJitPlugin,
+  createTailwindPlugin,
+  extractClassNamesFromSource,
   scopedTailwindCss,
   TAILWIND_SCOPE,
+  TAILWIND_VIRTUAL_MODULE,
 } from './tailwind-plugin';
+import { PluginPipeline } from '../core/plugin';
 import { SandboxFacade } from '../facade';
 
 function createFakeReact() {
@@ -45,6 +48,23 @@ const b = <div className={\`grid grid-cols-3\`} />;`;
     expect(classes).toContain('text-[9px]');
     expect(classes).toContain('bg-cyan-400/70');
     expect(classes).toContain('w-1/2');
+  });
+});
+
+describe('plugins/tailwind.extractClassNamesFromSource (token-based)', () => {
+  it('extracts classes from string literals', () => {
+    const code = `<div className="flex p-4">x</div>`;
+    const classes = extractClassNamesFromSource(code);
+    expect(classes).toContain('flex');
+    expect(classes).toContain('p-4');
+  });
+
+  it('extracts candidates from non-JSX string literals (array/object configs)', () => {
+    const code = `const styles = { card: 'bg-white rounded-lg shadow' };`;
+    const classes = extractClassNamesFromSource(code);
+    expect(classes).toContain('bg-white');
+    expect(classes).toContain('rounded-lg');
+    expect(classes).toContain('shadow');
   });
 });
 
@@ -102,48 +122,131 @@ describe('plugins/tailwind.scopedTailwindCss (Tailwind v4 JIT)', () => {
     expect(css).toContain('.s .md\\:flex');
     expect(css).toContain('.s .bg-white\\/10');
   });
+
+  it('links selectors to the player canvas and the base scope class', async () => {
+    const css = await scopedTailwindCss('__tsx_tw-k1o500', ['flex', 'justify-between']);
+    // Базовый scope (__tsx_tw) — его всегда вешает PlayerSandbox на data-remotion-canvas.
+    expect(css).toContain('.__tsx_tw .flex');
+    expect(css).toContain('.__tsx_tw .justify-between');
+    // Прямой селектор канваса плеера — страховка, если базовый класс отсутствует.
+    expect(css).toContain('[data-remotion-canvas="true"] .flex');
+    // Полный scope-класс сохраняется.
+    expect(css).toContain('.__tsx_tw-k1o500 .flex');
+  });
 });
 
-describe('plugins/tailwind.createTailwindJitPlugin', () => {
-  it('wraps exports.default in a scoped component after compile', async () => {
-    const plugin = createTailwindJitPlugin();
-    const compiled = await plugin.afterCompile!('exports.default = function C(){ return 1; };', '/App.tsx');
-    expect(compiled).toContain('className: scopeCls');
-    expect(compiled).toContain(`var scopeCls = "${TAILWIND_SCOPE}-`);
-    expect(compiled).toContain('dangerouslySetInnerHTML');
-    expect(compiled).toContain('exports.default = TailwindJitWrapper');
+describe('plugins/tailwind.createTailwindPlugin (onResolve/onLoad)', () => {
+  it('injects the generated CSS into document.head (outside the sandbox membrane)', async () => {
+    // Мокаем глобальный document — именно его видит код плагина на стороне фасада.
+    const styleEl = { setAttribute: vi.fn(), textContent: '' };
+    const head = {
+      querySelector: vi.fn(() => null),
+      appendChild: vi.fn((el: any) => {
+        styleEl.textContent = el.textContent;
+      }),
+    };
+    const fakeDoc = {
+      head,
+      createElement: vi.fn((tag: string) => (tag === 'style' ? styleEl : {})),
+    };
+    const savedDoc = globalThis.document;
+    (globalThis as any).document = fakeDoc;
+
+    try {
+      const pipeline = new PluginPipeline([createTailwindPlugin()]);
+      await pipeline.init({});
+
+      await pipeline.runLoad(TAILWIND_VIRTUAL_MODULE, 'tailwind-virtual', {
+        '/App.tsx': `<div className="flex justify-between bg-indigo-500" />`,
+      });
+
+      expect(head.appendChild).toHaveBeenCalled();
+      expect(styleEl.textContent).toContain('.flex');
+      expect(styleEl.textContent).toContain('.justify-between');
+      expect(styleEl.textContent).toContain('__tsx_tw');
+    } finally {
+      (globalThis as any).document = savedDoc;
+    }
   });
 
-  it('works end-to-end through the facade with a Tailwind-annotated component', async () => {
+  it('routes virtual:tailwind.css into the tailwind-virtual namespace', async () => {
+    const pipeline = new PluginPipeline([createTailwindPlugin()]);
+    await pipeline.init({});
+
+    const resolved = await pipeline.runResolve(TAILWIND_VIRTUAL_MODULE, '/App.tsx');
+    expect(resolved.namespace).toBe('tailwind-virtual');
+
+    const loaded = await pipeline.runLoad(TAILWIND_VIRTUAL_MODULE, resolved.namespace, {
+      '/App.tsx': `export default () => <div className="bg-indigo-500 p-2" />;`,
+    });
+    expect(loaded).not.toBeNull();
+    expect(loaded!.contents).toContain('data-tailwind-jit');
+    expect(loaded!.contents).toContain('.bg-indigo-500');
+    expect(loaded!.contents).toContain('.p-2');
+    expect(loaded!.contents).toContain('module.exports');
+  });
+
+  it('routes non-virtual imports through the default file namespace', async () => {
+    const pipeline = new PluginPipeline([createTailwindPlugin()]);
+    await pipeline.init({});
+
+    const resolved = await pipeline.runResolve('./theme.ts', '/App.tsx');
+    expect(resolved.namespace).toBe('file');
+    expect(resolved.path).toBe('./theme.ts');
+  });
+
+  it('works end-to-end through the facade with a virtual tailwind import', async () => {
     const React = createFakeReact();
     const facade = new SandboxFacade(
       { react: React },
-      { plugins: [createTailwindJitPlugin()] },
+      { plugins: [createTailwindPlugin()] },
     );
     const result = await facade.compile(
-      `export default function App(){
+      `import "virtual:tailwind.css";
+      export default function App(){
         return <div className="bg-indigo-500 text-white p-2 rounded">hi</div>;
       }`,
     );
     expect(result.error).toBeNull();
     const rendered = result.component!({});
     expect(rendered.type).toBe('div');
-    expect(rendered.props.className).toMatch(new RegExp(`^${TAILWIND_SCOPE}-`));
-    expect(rendered.children.length).toBe(2);
-    const styleTag = rendered.children[0];
-    expect(styleTag.type).toBe('style');
-    expect(styleTag.props.dangerouslySetInnerHTML.__html).toContain('.bg-indigo-500');
-    expect(styleTag.props.dangerouslySetInnerHTML.__html).toContain(rendered.props.className);
+    expect(rendered.props.className).toBe('bg-indigo-500 text-white p-2 rounded');
   });
 
-  it('invokes a custom builder instead of the built-in catalog', async () => {
-    const builder = vi.fn(() => '');
-    const plugin = createTailwindJitPlugin({ builder });
-    plugin.beforeCompile?.(`<div className="flex" />`, '/App.tsx');
-    const compiled = await plugin.afterCompile!('exports.default = () => null;', '/App.tsx');
-    const call = builder.mock.calls[0] as unknown as [string[], string];
-    expect(call[0]).toEqual(['flex']);
-    expect(call[1]).toMatch(new RegExp(`^${TAILWIND_SCOPE}-[a-z0-9]+$`));
-    expect(compiled).toContain('');
+  it('auto-injects the tailwind virtual import when the scene omits it', async () => {
+    const React = createFakeReact();
+    const facade = new SandboxFacade(
+      { react: React },
+      { plugins: [createTailwindPlugin()] },
+    );
+    const result = await facade.compile(
+      `export default function App(){
+        return <div className="flex justify-between p-4">hi</div>;
+      }`,
+    );
+    expect(result.error).toBeNull();
+    const rendered = result.component!({});
+    expect(rendered.type).toBe('div');
+    expect(rendered.props.className).toBe('flex justify-between p-4');
+  });
+
+  it('supports a custom builder', async () => {
+    const builder = vi.fn((classes: string[], scopeClass: string) =>
+      `.${scopeClass} {}\n/* ${classes.join(' ')} */`,
+    );
+    const plugin = createTailwindPlugin({ builder });
+    const pipeline = new PluginPipeline([plugin]);
+    await pipeline.init({});
+
+    const loaded = await pipeline.runLoad(
+      TAILWIND_VIRTUAL_MODULE,
+      'tailwind-virtual',
+      { '/App.tsx': `<div className="flex" />` },
+    );
+    expect(loaded).not.toBeNull();
+    expect(builder).toHaveBeenCalled();
+    const scopeClass = builder.mock.calls[0]![1] as string;
+    expect(scopeClass).toMatch(new RegExp(`^${TAILWIND_SCOPE}-[a-z0-9]+$`));
+    expect(loaded!.contents).toContain(`/* flex */`);
   });
 });

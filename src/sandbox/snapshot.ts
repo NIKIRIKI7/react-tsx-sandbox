@@ -1,11 +1,8 @@
 import { logger } from '../core/logger';
 
 export interface SnapshotOptions {
-  /** MIME-тип изображения. По умолчанию `image/png`. */
   format?: 'image/png' | 'image/jpeg' | 'image/webp';
-  /** Качество для jpeg/webp (0..1). По умолчанию 0.95. */
   quality?: number;
-  /** Целевой размер кадра (1:1, без UI-масштаба). */
   targetWidth?: number;
   targetHeight?: number;
 }
@@ -13,13 +10,8 @@ export interface SnapshotOptions {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 const OVERLAY_SELECTORS =
-  '[data-sandbox-overlay], [data-testid="safe-zones-overlay"], .safe-zone-overlay, audio, video';
+  '[data-sandbox-overlay], [data-testid="safe-zones-overlay"], .safe-zone-overlay';
 
-/**
- * Находит элемент композиции: размеченный `[data-remotion-canvas="true"]`
- * или первый кандидат с инлайновыми `width`/`height` (например, блок
- * `__remotion-player`). Оверлеи и UI-панели остаются «снаружи».
- */
 export function findCompositionElement(container: HTMLElement): HTMLElement | null {
   const marked = container.querySelector<HTMLElement>('[data-remotion-canvas="true"]');
   if (marked) return marked;
@@ -31,7 +23,6 @@ export function findCompositionElement(container: HTMLElement): HTMLElement | nu
   );
 }
 
-/** Вырезает из кадра оверлеи и медиа (не относятся к контенту). */
 export function stripSandboxElements(root: HTMLElement): void {
   root.querySelectorAll(OVERLAY_SELECTORS).forEach((element) => element.remove());
 }
@@ -50,28 +41,80 @@ function normalizeCloneStyles(clone: HTMLElement, width: number, height: number)
     'max-height: none',
     'overflow: hidden',
     'box-sizing: border-box',
+    'background-color: #000000', // Исключает прозрачность подложки (устраняет H.264 артефакты)
   ].join(';');
 }
 
-/**
- * Копирует пиксели ОРИГИНАЛЬНЫХ canvas в клоны (внутри foreignObject
- * холсты сериализуются пустыми). Best-effort; если canvas tainted — пропускаем.
- */
 function inheritCanvasPixels(sourceContainer: HTMLElement, clone: HTMLElement): void {
   const sources = Array.from(sourceContainer.querySelectorAll('canvas'));
   clone.querySelectorAll('canvas').forEach((target) => {
     const source = sources.shift();
-    if (!source) return;
-    if (!(source instanceof HTMLCanvasElement) || !(target instanceof HTMLCanvasElement)) return;
+    if (!source || !(source instanceof HTMLCanvasElement) || !(target instanceof HTMLCanvasElement)) return;
     try {
-      target.width = source.width;
-      target.height = source.height;
-      const context = target.getContext('2d');
+      const img = document.createElement('img');
+      img.src = source.toDataURL('image/png', 1.0);
+      img.className = target.className;
+      img.style.cssText = target.style.cssText;
+      if (!img.style.width) img.style.width = source.offsetWidth + 'px';
+      if (!img.style.height) img.style.height = source.offsetHeight + 'px';
+      target.replaceWith(img);
+    } catch (error) {
+      logger.warn('Не удалось скопировать пиксели canvas в кадр (возможно CORS taint)', error);
+    }
+  });
+}
+
+function inheritVideoPixels(sourceContainer: HTMLElement, clone: HTMLElement): void {
+  const sourceVideos = Array.from(sourceContainer.querySelectorAll('video'));
+  clone.querySelectorAll('video').forEach((target) => {
+    const source = sourceVideos.shift();
+    if (!source || !(source instanceof HTMLVideoElement)) return;
+
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = source.videoWidth || source.clientWidth || target.clientWidth || 1920;
+      canvas.height = source.videoHeight || source.clientHeight || target.clientHeight || 1080;
+      const context = canvas.getContext('2d');
       if (context) {
-        context.drawImage(source, 0, 0);
+        context.drawImage(source, 0, 0, canvas.width, canvas.height);
+      }
+      canvas.className = target.className;
+      canvas.style.cssText = target.style.cssText;
+
+      const img = document.createElement('img');
+      // Используем JPEG для видеокадров, так как прозрачность видео в вебе всё равно почти не встречается,
+      // а JPEG быстрее кодируется и весит кратно меньше в DOM.
+      img.src = canvas.toDataURL('image/jpeg', 1.0);
+      img.className = target.className;
+      img.style.cssText = target.style.cssText;
+      if (!img.style.width) img.style.width = source.offsetWidth + 'px';
+      if (!img.style.height) img.style.height = source.offsetHeight + 'px';
+      img.style.objectFit = window.getComputedStyle(source).objectFit || 'cover';
+      target.replaceWith(img);
+    } catch (error) {
+      logger.warn('Не удалось скопировать кадр видео в canvas', error);
+    }
+  });
+}
+
+function inheritImagePixels(sourceContainer: HTMLElement, clone: HTMLElement): void {
+  const sourceImages = Array.from(sourceContainer.querySelectorAll('img'));
+  clone.querySelectorAll('img').forEach((target) => {
+    const source = sourceImages.shift();
+    if (!source || !(source instanceof HTMLImageElement)) return;
+    if (target.src.startsWith('data:')) return;
+
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = source.naturalWidth || source.width || target.clientWidth || 1920;
+      canvas.height = source.naturalHeight || source.height || target.clientHeight || 1080;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(source, 0, 0, canvas.width, canvas.height);
+        target.src = canvas.toDataURL('image/png', 1.0);
       }
     } catch (error) {
-      logger.warn('Не удалось скопировать пиксели canvas в кадр', error);
+      // Ignore CORS errors
     }
   });
 }
@@ -95,12 +138,6 @@ function collectPageCss(): string {
   return css;
 }
 
-/**
- * Сериализует изолированную композицию в `data:image/svg+xml`:
- *  - клонируется ТОЛЬКО `[data-remotion-canvas]` (без оверлеев Safe Zones);
- *  - стили страницы инжектируются в `<style>` (классы вроде Tailwind работают);
- *  - пиксели canvas переносятся из оригинала.
- */
 export function buildCompositionSvgDataUrl(
   container: HTMLElement,
   width: number,
@@ -111,7 +148,10 @@ export function buildCompositionSvgDataUrl(
 
   stripSandboxElements(clone);
   normalizeCloneStyles(clone, width, height);
+
   inheritCanvasPixels(container, clone);
+  inheritVideoPixels(container, clone);
+  inheritImagePixels(container, clone);
 
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('xmlns', SVG_NS);
@@ -132,9 +172,8 @@ export function buildCompositionSvgDataUrl(
 
   const content = document.createElementNS(XHTML_NS, 'div');
   content.setAttribute('xmlns', XHTML_NS);
-  content.style.cssText = `width:${width}px;height:${height}px;overflow:hidden;`;
+  content.style.cssText = `width:${width}px;height:${height}px;overflow:hidden;background-color:#000000;`;
   content.appendChild(clone);
-
   foreignObject.appendChild(content);
   svg.appendChild(foreignObject);
 
@@ -164,7 +203,9 @@ function rasterize(
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const context = canvas.getContext('2d');
+    // willReadFrequently может слегка ускорить toDataURL в некоторых браузерах
+    const context = canvas.getContext('2d', { willReadFrequently: true, alpha: false });
+
     if (!context) {
       reject(new Error('Не удалось инициализировать 2D-контекст canvas.'));
       return;
@@ -173,7 +214,9 @@ function rasterize(
     const image = new Image();
     image.onload = () => {
       try {
-        context.clearRect(0, 0, width, height);
+        // Жесткая черная подложка
+        context.fillStyle = '#000000';
+        context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
         resolve(canvas.toDataURL(format, quality));
       } catch (error) {
@@ -190,13 +233,6 @@ function rasterize(
   });
 }
 
-/**
- * Снимает текущий кадр композиции в data-URL прямо в браузере (Zero-Backend).
- *
- * Порядок: готовый `<canvas>` с пропорциями таргета → изоляция
- * `[data-remotion-canvas]` → SVG `<foreignObject>` → canvas → SVG data-URL
- * (best-effort, если растеризация недоступна).
- */
 export async function takeContainerSnapshot(
   container: HTMLElement | null,
   options: SnapshotOptions = {},
@@ -205,13 +241,16 @@ export async function takeContainerSnapshot(
     throw new TypeError('Container must be an HTMLElement');
   }
 
-  const format = options.format ?? 'image/png';
-  const quality = options.quality ?? 0.95;
+  const format = options.format ?? 'image/jpeg'; // Дефолт на JPEG
+  const quality = options.quality ?? 1.0;
 
   const canvases = Array.from(container.querySelectorAll('canvas'));
+
+  // Если внутри уже есть готовый холст (например, Three.js) - берем его напрямую.
   if (canvases.length > 0) {
     const targetWidth = options.targetWidth ?? 0;
     const targetHeight = options.targetHeight ?? 0;
+
     const aspectMatch = canvases.find((canvas) => {
       if (canvas.width <= 0 || canvas.height <= 0) return false;
       if (targetWidth > 0 && targetHeight > 0) {
@@ -219,6 +258,7 @@ export async function takeContainerSnapshot(
       }
       return true;
     });
+
     const direct = aspectMatch ?? canvases[0];
     if (direct) {
       try {
@@ -242,7 +282,6 @@ export async function takeContainerSnapshot(
     1080;
 
   const dataUrl = buildCompositionSvgDataUrl(container, width, height);
-
   try {
     return await rasterize(dataUrl, width, height, format, quality);
   } catch (error) {

@@ -1,25 +1,21 @@
-# Встроенный легковесный движок экспорта (Zero-Dependency Export Engine)
+# Движок браузерного экспорта (Mediabunny Export Engine)
 
 ## Обзор архитектуры
 
-Модуль `src/export/browser-export.ts` реализует полностью автономный, работающий на клиенте пайплайн записи видео без сторонних зависимостей: чистый браузерный WebCodecs (`VideoEncoder` + `VideoFrame`) + компактные встроенные муксеры `src/export/muxers/`.
+Модуль `src/export/browser-export.ts` реализует работающий полностью на клиенте пайплайн записи видео в MP4/WebM. Кодирование и мультиплексирование выполняет библиотека **`mediabunny`** (WebCodecs/WebGPU), которая из коробки даёт корректные MP4 (ISO-BMFF, FastStart) и WebM (EBML/Matroska) без собственных муксеров.
 
-### Преимущества перед `mediabunny`
-- **Размер бандла**: внешний монорепозиторий `mediabunny` (~1.5+ МБ) полностью удалён из зависимостей.
-- **Производительность**: прямое обращение к браузерным классам `VideoEncoder` и `VideoFrame` без оверхеда абстракций.
-- **Поддержка**: Chrome 94+, Edge 94+, Safari 16.4+, Firefox 130+ (нативная поддержка WebCodecs).
+### Почему `mediabunny`
+- **Надёжные контейнеры**: валидированные `ffprobe` форматы MP4 и WebM, автоматическая сборка `moov`/MDAT, `stts`/`stsz`/`stco`, чанков `Cluster` WebM, кодек-профилей H.264.
+- **Простота**: `Output` + `Mp4OutputFormat/WebMOutputFormat` + `BufferTarget` + `CanvasSource` заменяют вручную написанные муксеры (ISO-BMFF/EBML) и бинарный писатель.
+- **Поддержка**: браузеры с WebCodecs (`VideoEncoder`) — Chrome/Edge 94+, Safari 16.4+, Firefox 130+.
 
 ### Структура модулей
 
 ```text
 src/export/
-├── browser-export.ts          <-- фасад экспорта (API 100% совместим)
-├── browser-export.test.ts
-├── muxers.test.ts             <-- unit-тесты муксеров
-└── muxers/
-    ├── byte-writer.ts         <-- динамический бинарный буфер (BE-числа, патчинг, строки)
-    ├── isobmff-muxer.ts       <-- минимальный MP4-муксер (H.264/AVC1 с avcC)
-    └── ebml-muxer.ts          <-- минимальный EBML/WebM-муксер (VP8, VP9)
+├── browser-export.ts          <-- фасад экспорта (Mediabunny-пайплайн)
+├── browser-export.test.ts     <-- unit-тесты (битрейт, чётные размеры, моки mediabunny)
+└── (muxers/ удалены — мультиплексирование отдано mediabunny)
 ```
 
 ---
@@ -28,88 +24,61 @@ src/export/
 
 ```
 Container (Remotion Player)
-      │ takeContainerSnapshot() → PNG data-URL
+      │ seekTo(frame) → waitRender (rAF ×2) → waitForMediaElements (ждёт seeked/canplay у <video>)
       ▼
-Canvas → new VideoFrame(canvas, { timestamp µs, duration })
-      │ VideoEncoder.configure({ codec, bitrate, framerate, avc:{format:'avc'} })
+takeContainerSnapshot() → JPEG data-URL (качество 1.0, фон чёрный #000000)
+      │ drawDataUrlToCanvas() → createImageBitmap (фолбэк new Image()), alpha:false
       ▼
-encodedsample/chunk (H.264 AVCC | VP8/VP9)
-      │ onOutput → addSample()
+HTMLCanvasElement → CanvasSource(canvas, { codec, bitrate })
+      │ videoSource.add(timestampSec, durationSec) → WebCodecs VideoEncoder
       ▼
-IsobmffMuxer (ftyp→mdat→moov)  |  EbmlMuxer (EBML→Segment→Cluster)
+mediabunny Output (Mp4OutputFormat | WebMOutputFormat) → BufferTarget
       ▼
 Blob (video/mp4 | video/webm) → downloadExportBlob() / ObjectURL / fetch
 ```
+
+Ключевые оптимизации скорости:
+- **Снимок в JPEG**: `format: 'image/jpeg', quality: 1.0` — самый быстрый браузерный формат кадра.
+- **`createImageBitmap`**: декодирование кадра вынесено с главного потока (фолбэк — `new Image()`).
+- **`alpha: false` + чёрная подложка**: ускоряет H.264 и убирает артефакты прозрачности.
+- **`waitForMediaElements`**: после `seek` ждём `seeked`/`canplay` у всех `<video>` (таймаут 300 мс) — устраняет «рывки» B-roll (`OffthreadVideo`).
+- **`frameDelayMs` по умолчанию `0`**: отдельная задержка не нужна, т.к. готовность медиа жёстко ожидается.
 
 ---
 
 ## Форматы и кодеки
 
-| Кодек | Контейнер | MIME-тип | Профиль / Уровень | Совместимость |
-| :--- | :--- | :--- | :--- | :--- |
-| **`avc`** (H.264) | **MP4** (ISOBMFF) | `video/mp4` | Baseline 3.1 / Main 4.2 / High 5.1 (по разрешению) | QuickTime, iOS, Android, все браузеры, VLC, FFmpeg |
-| **`vp9`** | **WebM** (EBML) | `video/webm` | Profile 0, 8-bit | Chrome, Firefox, VLC |
-| **`vp8`** | **WebM** (EBML) | `video/webm` | VP8 Native | Устаревшие браузеры |
+| `codec` | Контейнер | MIME-тип | Кодировщик |
+| :--- | :--- | :--- | :--- |
+| **`avc`** (H.264) | **MP4** | `video/mp4` | `mediabunny` `Mp4OutputFormat` + WebCodecs `avc` |
+| **`vp9`** | **WebM** | `video/webm` | `mediabunny` `WebMOutputFormat` + WebCodecs `vp9` |
+| **`vp8`** | **WebM** | `video/webm` | `mediabunny` `WebMOutputFormat` + WebCodecs `vp8` |
 
-Разрешения кодека AVC определяются автоматически:
-- `≤ 1280×720` → `avc1.42001f` (Baseline 3.1)
-- `≤ 1920×1080` → `avc1.4d002a` (Main 4.2)
-- выше → `avc1.640033` (High 5.1, 4K)
+Пресеты качества задаются битрейтом на пиксель в секунду (`QUALITY_BPP`):
 
----
+| Качество | Битрейт (бит/пикс/сек) |
+| :--- | :--- |
+| `low` | 0.05 |
+| `medium` | 0.15 |
+| `high` (дефолт) | 0.30 |
 
-## Структура генерируемых контейнеров
+`calculateBitrate(width, height, fps, quality)` = `round(width * height * fps * BPP)`.
+Явный `bitrate` в опциях перекрывает расчёт.
 
-### MP4 (ISO/IEC 14496-12 / 14496-15, FastStart)
-```
-ftyp  (isom, minor 0x00000200, compatible: isom/mp41/mp42/avc1)
-mdat  (AVCC length-prefixed NAL-юниты; chunk-офсеты фиксируются для stco)
-moov
- ├─ mvhd  (timescale 90000, duration = Σ sample durations)
- ├─ trak
- │   ├─ tkhd  (track enabled/in-movie/in-preview, ширины/высоты 16.16)
- │   └─ mdia
- │       ├─ mdhd  (timescale 90000, language 'und')
- │       ├─ hdlr  (handler vide)
- │       └─ minf
- │           ├─ vmhd
- │           ├─ dinf → dref → url (self-contained)
- │           └─ stbl
- │               ├─ stsd → avc1 → avcC  (description из decoderConfig)
- │               ├─ stts (Time-to-Sample, схлопнутые дельты)
- │               ├─ stss (Sync Sample; только если есть дельта-кадры)
- │               ├─ stsc (1 сэмпл на чанк)
- │               ├─ stsz (размеры сэмплов)
- │               └─ stco (смещения чанков)
-```
-
-### WebM (EBML / Matroska)
-```
-EBML Header  (DocType webm, версия 4, read version 2, 8-байтовые VINT)
-Segment (известный размер, 8-байтовый VINT)
- ├─ Info      (TimecodeScale 1e6 = 1 мс, Duration)
- ├─ Tracks    (TrackEntry: Type 1 (video), V_VP8/V_VP9, PixelWidth/Height)
- └─ Cluster   (на каждый keyframe: Timecode + SimpleBlock'ы)
-     ├─ SimpleBlock: TrackNumber VINT + int16 rel-timecode + flags + payload
-     ...
-```
+Размеры кадра нормализуются до чётных (`toEvenFrameSize`) — требование H.264/WebCodecs.
 
 ---
 
 ## Ключевые реализации
 
-### `ByteWriter`
-Динамический `Uint8Array`-буфер: `writeUint8/16/24/32BE`, `writeInt16BE`, `writeUint64BE`, `writeFloat64BE`, `writeBytes`, `writeAscii`, `patchUint32BE` (отложенный патчинг размеров боксов), `toBlob(mimeType)`.
+- `assertWebCodecs()` / `supportsBrowserExport()` — проверка наличия `VideoEncoder` в браузере.
+- `waitForMediaElements(container)` — дожидается готовности кадра во всех `<video>` (для B-roll).
+- `defaultWaitRender(frameDelayMs)` — ожидание обновления DOM: двойной `requestAnimationFrame` + опциональная задержка.
+- `drawDataUrlToCanvas(dataUrl, canvas, w, h)` — перенос снимка на экспортный canvas через `createImageBitmap`; чёрная заливка перед отрисовкой.
+- `exportBrowserVideo()` — создаёт `Output`, `CanvasSource` и `BufferTarget`, добавляет видео-трек, ждёт кадры (поддержка `AbortSignal`), вызывает `finalize()` и возвращает `Blob`.
+- `downloadExportBlob(blob, filename?)` — скачивание с именем `sandbox-export-<ts>.{mp4|webm}`.
 
-### `IsobmffMuxer`
-Валидирован `ffprobe`: распознаётся как `mov,mp4,m4a,3gp,3g2,mj2`, корректные `codec_name=h264` и длительность.
-- `avcC` берётся напрямую из `VideoEncoder` `metadata.decoderConfig.description` — гарантированная совместимость SPS/PPS с закодированным потоком (AVCC: 4-байтовые префиксы длины).
-- Fallback-конфигурация Baseline 3.1 при отсутствии description.
-
-### `EbmlMuxer`
-Валидирован `ffprobe`: распознаётся как `matroska,webm`, корректные `codec_name=vp8/vp9` и длительность.
-- VINT-кодирование переменной длины (1–8 байт) для ID и размеров EBML-элементов.
-- Кластеры начинаются на ключевых кадрах (SimpleBlock flags 0x80=key / 0x00=delta).
+Прогресс: `onProgress({ frame, totalFrames, progress, phase })`, фазы `capturing → encoding → done`.
 
 ---
 
@@ -152,11 +121,11 @@ downloadExportBlob(videoBlob, 'my-render.mp4');
 ---
 
 ## Ограничения
-- Архитектура с `avc: { format: 'avc' }` пишет только видео-трек: аудио в браузерный экспорт не включается.
-- Полное демультиплексирование (MKV/MP4-ридеры) и аудио-кодеки (AC3/DTS/FLAC) из `mediabunny` не нужны для задачи захвата кадров плеера — они удалены.
+- Пайплайн пишет только видео-трек: аудио в браузерный экспорт не включается.
 - Экспорт работает только в браузерах с `VideoEncoder`; `supportsBrowserExport()` позволяет проверить поддержку заранее.
+- Зависимость от внешнего пакета `mediabunny` (в отличие от прежних встроенных муксеров).
 
 ## Проверка
 - `npm run typecheck` — чисто.
-- `npm test` — 256 passed (включая 11 тестов `src/export/muxers.test.ts`).
-- `npm run build` / `npm run demo:build` — в сборке нет `mediabunny`/`vendor-mediabunny`.
+- `npm test` — 259 passed (включая 8 тестов `src/export/browser-export.test.ts`).
+- `npm run build` / `npm run demo:build` — сборка включает `mediabunny` из `node_modules`.

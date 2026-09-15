@@ -111,7 +111,7 @@ const { component, error, errorPhase } = await facade.compile(tsxSource);
 | `extractAssetZip`, `createAssetUrlMap`, `releaseAssetUrls` | ZIP-ассеты |
 | `MusicLayer`, `SFXLayer`, `TrackLayer`, `useActiveCues` | Data-Driven Timeline |
 | `takeContainerSnapshot`, `createRemotionWatchdog`, `cleanupCanvasWebGl` | надёжность плеера |
-| `exportBrowserVideo`, `downloadExportBlob`, `supportsBrowserExport` | MP4/WebM-экспорт через WebCodecs + встроенные муксеры |
+| `exportBrowserVideo`, `downloadExportBlob`, `supportsBrowserExport` | MP4/WebM-экспорт через WebCodecs + `mediabunny` |
 | `SafeZonesOverlay` | оверлеи safe zones (в экспорт/снимок не попадают) |
 | `PlayerContext`, `usePlayerContext` | состояние плеера |
 | `logger`, `configureLogger` | реактивный логгер (debug/info/warn/error) |
@@ -142,7 +142,7 @@ class SandboxFacade {
 | `importer` | `ModuleImporter` | нативный `import()` | своя загрузка модуля |
 | `loopProtect` | `boolean` | `true` | защита от бесконечных циклов |
 | `maxIterations` | `number` | `500_000` | лимит итераций |
-| `plugins` | `PipelinePlugin[]` | `[]` | middleware до/после компиляции |
+| `plugins` | `(PipelinePlugin \| SandboxPlugin)[]` | `[]` | middleware до/после компиляции + onResolve/onLoad виртуальные модули |
 
 ```ts
 const facade = new SandboxFacade(
@@ -392,7 +392,7 @@ ref.current?.abortExport();
 
 ### 6.5 Программный экспорт видео
 
-`exportVideo` рендерит плеер в MP4/WebM прямо в браузере (WebCodecs + встроенные ISO-BMFF/EBML муксеры)
+`exportVideo` рендерит плеер в MP4/WebM прямо в браузере (WebCodecs + мультиплексирование `mediabunny`)
 и по умолчанию скачивает файл (`filename: false` — только вернуть `Blob`).
 
 Захват кадра идёт в **реальном разрешении композиции** (по `config.width/height`,
@@ -1002,6 +1002,22 @@ interface PipelinePlugin {
   afterCompile?: (compiledJs: string, filepath: string) => string | Promise<string>;
 }
 
+interface SandboxPlugin {
+  name: string;
+  setup(build: PluginBuild): void | Promise<void>;
+}
+
+interface PluginBuild {
+  onResolve(
+    options: { filter: RegExp; namespace?: string },
+    callback: (args: OnResolveArgs) => OnResolveResult | null,
+  ): void;
+  onLoad(
+    options: { filter: RegExp; namespace?: string },
+    callback: (args: OnLoadArgs) => OnLoadResult | null,
+  ): void;
+}
+
 const DEFAULT_ENTRY = '/App.tsx';
 const DEFAULT_MAX_ITERATIONS = 500_000;
 ```
@@ -1194,7 +1210,7 @@ const metadata = extractSceneMetadata(codeString, evaluatedExports, Component);
 
 ### v0.6.0
 - **Плеер:** стабильный `SafeComponent` (без ре-маунта `<Player />`), явные `width/height: 100%` для контейнера и плеера, headless-UI не размонтируется при компиляции/ошибках.
-- **Subpath `./export`:** MP4/WebM-экспорт кадра/видео через WebCodecs + встроенные ISO-BMFF/EBML муксеры (`browser-tsx-sandbox/export`).
+- **Subpath `./export`:** MP4/WebM-экспорт кадра/видео через WebCodecs + `mediabunny` (`browser-tsx-sandbox/export`).
 - **Subpath `./plugins`:** Tailwind JIT-плагин (`browser-tsx-sandbox/plugins`).
 - **Subpath `./hmr`:** инкрементальная перекомпиляция VFS, HMR без полного сброса (`browser-tsx-sandbox/hmr`).
 - **Фичи-пайплайн:** `render/features.e2e.test.ts` — E2E-рендер новых сцен, `render:features`.

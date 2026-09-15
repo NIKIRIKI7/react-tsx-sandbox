@@ -10,18 +10,18 @@ const outDir = path.join(renderDir, 'out');
 const read = (rel: string) => readFileSync(path.join(projectRoot, rel), 'utf8');
 
 describe('e2e: анимации фич — Tailwind JIT, HMR-граф, экспорт-пайплайн', () => {
-  it('tailwind-jit сцена: className коллектор и рантайм-JIT темой', () => {
+  it('tailwind-jit сцена: виртуальный модуль и onResolve/onLoad плагин', () => {
     const scene = read('examples/tailwind-jit-scene.tsx');
     expect(scene).toContain("from 'remotion'");
-    expect(scene).toContain('className');
+    expect(scene).toContain("import 'virtual:tailwind.css'");
     expect(scene).toContain('bg-rose-500');
     expect(scene).toContain('text-7xl');
     expect(scene).toContain('animate-pulse');
     expect(scene).toContain('animate-spin');
 
     const entry = read('render/entry-features.tsx');
-    expect(entry).toContain('createTailwindJitPlugin');
-    expect(entry).toContain('plugins: [createTailwindJitPlugin()]');
+    expect(entry).toContain('createTailwindPlugin');
+    expect(entry).toContain('plugins: [createTailwindPlugin()]');
   });
 
   it('hmr-module-graph сцена: граф зависимостей и граница HMR', () => {

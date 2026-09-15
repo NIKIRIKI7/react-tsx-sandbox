@@ -22,12 +22,22 @@ export { loadMissingModules, defaultCdnResolver, defaultImporter } from './libra
 export type { ModuleImporter, LoadModulesOptions } from './library-manager/loader';
 
 export { diffFiles, buildImportsGraph, getDependents } from './core/hmr';
-export type { HmrChanges } from './core/hmr';
+export {
+  diffFilesWithHashes,
+  buildDependencyGraph,
+  getAffectedDependents,
+} from './core/hmr';
+export type { HmrChanges, DependencyGraph } from './core/hmr';
 
-export { createTailwindJitPlugin, collectTailwindClasses, scopedTailwindCss } from './plugins/tailwind-plugin';
-export type {
-  TailwindJitPluginOptions,
+export {
+  createTailwindPlugin,
+  collectTailwindClasses,
+  extractClassNamesFromSource,
+  scopedTailwindCss,
+  scopeCss,
+  TAILWIND_VIRTUAL_MODULE,
 } from './plugins/tailwind-plugin';
+export type { TailwindJitPluginOptions } from './plugins/tailwind-plugin';
 
 export {
   exportBrowserVideo,
@@ -44,13 +54,33 @@ export type {
 
 export { extractBareImports, scanImports, resolveVfsPath, stripComments } from './compiler/analyzer';
 export type { ScanResult } from './compiler/analyzer';
+export {
+  resolveVirtualPath,
+  normalizeCanonicalPath,
+  getDirname,
+  DEFAULT_EXTENSIONS,
+} from './compiler/path';
 export { compileTsx, SucraseCompilerAdapter, cleanMarkdownFences } from './compiler/transform';
 export { injectLoopProtection } from './compiler/loop-protect';
 export { getSandboxTypeDefinitions } from './compiler/types-helper';
 
 export { executeComponent } from './sandbox/evaluator';
 export type { EvaluatorContext } from './sandbox/evaluator';
-export { getShadowedGlobals } from './sandbox/scope';
+export { createSandboxMembrane, getShadowedGlobals, FORBIDDEN_GLOBALS } from './sandbox/scope';
+
+export { ChunkJoiner } from './core/joiner';
+export { CancellationToken, RenderResourceManager } from './core/lifecycle';
+export { PluginPipeline } from './core/plugin';
+export type {
+  SandboxPlugin,
+  PluginBuild,
+  OnResolveArgs,
+  OnResolveResult,
+  OnLoadArgs,
+  OnLoadResult,
+  ResolvedModuleData,
+} from './core/plugin';
+export { RawSourceMapConsumer, LineColumnTracker, remapStackTrace } from './core/diagnostics';
 
 export { WorkerCompilerAdapter, createCompilerWorker } from './worker/WorkerCompilerAdapter';
 

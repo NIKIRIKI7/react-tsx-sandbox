@@ -17,7 +17,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { SandboxFacade } from '../src/facade';
-import { createTailwindJitPlugin } from '../src/plugins/tailwind-plugin';
+import { createTailwindPlugin } from '../src/plugins/tailwind-plugin';
 import { compileTsx } from '../src/compiler/transform';
 import { executeComponent } from '../src/sandbox/evaluator';
 import { tailwindSource, hmrSource, exportSource, hmrVfs, hmrVfsHot } from './.generated/features-scenes';
@@ -51,7 +51,7 @@ async function buildTailwind() {
   // собирается из className прямо в рантайме браузера.
   const facade = new SandboxFacade(
     { react: React, remotion: Remotion, 'lucide-react': Lucide },
-    { plugins: [createTailwindJitPlugin()] },
+    { plugins: [createTailwindPlugin()] },
   );
   const result = await facade.compile(tailwindSource);
   if (result.error) throw result.error;

@@ -256,7 +256,7 @@ describe('react/PlayerSandbox: автоопределение параметро
     expect(await screen.findByText('1080x1920@300fps30 title:Видор mark:v frame:0')).toBeTruthy();
   });
 
-  it('вариант 7: явные пропсы config переопределяют метаданные сцены', async () => {
+  it('вариант 7: метаданные сцены (compositionConfig) имеют высший приоритет над пропсами config', async () => {
     render(
       <PlayerSandbox
         config={{
@@ -278,6 +278,6 @@ describe('react/PlayerSandbox: автоопределение параметро
       />,
     );
 
-    expect(await screen.findByText('640x360@10fps30 title:none mark:x frame:0')).toBeTruthy();
+    expect(await screen.findByText('1080x1920@240fps60 title:none mark:x frame:0')).toBeTruthy();
   });
 });

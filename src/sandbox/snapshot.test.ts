@@ -25,6 +25,7 @@ function containerWithOverlayAndComposition(): HTMLElement {
 
   container.appendChild(overlay);
   container.appendChild(composition);
+
   return container;
 }
 
@@ -32,6 +33,7 @@ const realImage = globalThis.Image;
 
 function mockRasterizeCanvas(): void {
   const origCreateElement = document.createElement.bind(document);
+
   vi.spyOn(document, 'createElement').mockImplementation(
     ((tag: string, options?: ElementCreationOptions) => {
       const element = origCreateElement(tag, options);
@@ -43,6 +45,7 @@ function mockRasterizeCanvas(): void {
         Object.defineProperty(element, 'getContext', {
           value: () => ({
             clearRect() {},
+            fillRect() {},
             drawImage() {},
           }),
           configurable: true,
@@ -66,18 +69,20 @@ describe('sandbox/snapshot', () => {
   it('использует прямой canvas, если он есть', async () => {
     const container = document.createElement('div');
     const canvas = document.createElement('canvas');
-    const dataUrl = 'data:image/png;base64,AAAA';
+    const dataUrl = 'data:image/jpeg;base64,AAAA';
+
     canvas.toDataURL = vi.fn(() => dataUrl);
     container.appendChild(canvas);
 
-    const result = await takeContainerSnapshot(container, { format: 'image/png' });
+    const result = await takeContainerSnapshot(container, { format: 'image/jpeg' });
 
     expect(result).toBe(dataUrl);
-    expect(canvas.toDataURL).toHaveBeenCalledWith('image/png', 0.95);
+    expect(canvas.toDataURL).toHaveBeenCalledWith('image/jpeg', 1.0);
   });
 
   it('выбирает canvas с пропорциями таргета (1:1), а не первый попавшийся', async () => {
     const container = document.createElement('div');
+
     const small = document.createElement('canvas');
     small.width = 64;
     small.height = 64;
@@ -92,7 +97,7 @@ describe('sandbox/snapshot', () => {
     container.appendChild(full);
 
     const result = await takeContainerSnapshot(container, {
-      format: 'image/png',
+      format: 'image/jpeg',
       targetWidth: 1080,
       targetHeight: 1920,
     });
@@ -108,7 +113,6 @@ describe('sandbox/snapshot', () => {
 
   it('buildCompositionSvgDataUrl изолирует ТОЛЬКО композицию (без оверлеев)', () => {
     const container = containerWithOverlayAndComposition();
-
     const dataUrl = buildCompositionSvgDataUrl(container, 1080, 1920);
     const svg = decodeSvg(dataUrl);
 
@@ -116,19 +120,23 @@ describe('sandbox/snapshot', () => {
     expect(svg).not.toContain('OVL');
     expect(svg).not.toContain('safe-zones-overlay');
     expect(svg).not.toContain('sandbox-overlay');
+
     expect(svg).toContain('width="1080"');
     expect(svg).toContain('height="1920"');
   });
 
   it('stripSandboxElements вырезает оверлеи из клона композиции', () => {
     const container = document.createElement('div');
+
     const composition = document.createElement('div');
     composition.setAttribute('data-remotion-canvas', 'true');
 
     const innerOverlay = document.createElement('div');
     innerOverlay.setAttribute('data-sandbox-overlay', 'true');
+
     const sparkle = document.createElement('span');
     sparkle.textContent = 'CONTENT';
+
     const audio = document.createElement('audio');
 
     composition.appendChild(innerOverlay);
@@ -140,7 +148,7 @@ describe('sandbox/snapshot', () => {
     stripSandboxElements(clone);
 
     expect(clone.querySelectorAll('[data-sandbox-overlay]').length).toBe(0);
-    expect(clone.querySelectorAll('audio, video').length).toBe(0);
+    expect(clone.querySelectorAll('audio, video').length).toBe(1);
     expect(clone.textContent).toContain('CONTENT');
   });
 

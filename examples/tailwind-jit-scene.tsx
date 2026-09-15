@@ -1,10 +1,12 @@
 import React from 'react';
+import 'virtual:tailwind.css';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import { Cpu, Layers, Package, Zap } from 'lucide-react';
 
-// Сцена-«каталог утилит»: рендерится ПЕСОЧНИЦЕЙ, обёрнутой в createTailwindJitPlugin(),
-// поэтому все className ниже компилируются в CSS прямо в браузере (клиентский JIT),
-// а в DOM вставляется <style> со scoped-классами, собранными из исходника.
+// Сцена-«каталог утилит»: рендерится ПЕСОЧНИЦЕЙ с createTailwindPlugin().
+// Плагин перехватывает `import "virtual:tailwind.css"` через onResolve/onLoad,
+// собирает классы из строковых токенов VFS и инжектит <style data-tailwind-jit>
+// со scoped-классами.
 const SWATCHES = [
   { cls: 'bg-rose-500', label: 'bg-rose-500' },
   { cls: 'bg-amber-400', label: 'bg-amber-400' },

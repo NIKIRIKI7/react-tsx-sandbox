@@ -1,6 +1,6 @@
 {
   "name": "browser-tsx-sandbox",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Pure client-side TSX compiler and sandbox evaluator with dynamic NPM library loading.",
   "type": "module",
   "license": "MIT",
@@ -81,6 +81,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.3",
+    "mediabunny": "^1.56.3",
     "postcss": "^8.5.28",
     "sucrase": "^3.35.0",
     "tailwindcss": "^4.3.3"

@@ -1,6 +1,9 @@
 # Плагины и Tailwind CSS
 
-Библиотека `browser-tsx-sandbox` оснащена лёгкой системой плагинов (Pipeline Plugins). Плагины перехватывают код на этапах **до** компиляции (работа с исходным TSX/TypeScript) и **после** компиляции (работа с готовым CommonJS JavaScript).
+Библиотека `browser-tsx-sandbox` оснащена двухуровневой системой плагинов в стиле **esbuild**:
+
+- **`SandboxPlugin` (onResolve / onLoad)** — маршрутизация и загрузка виртуальных модулей (`virtual:tailwind.css`, CSS, SVG, ZIP-ассеты). Плагин перехватывает импорт, решает, из какого пространства имён его грузить, и отдаёт готовое содержимое с loader'ом.
+- **`PipelinePlugin` (beforeCompile / afterCompile)** — классическая текстовая хирургия до/после компиляции для обратной совместимости.
 
 Это открывает возможности для авто-импортов, минификации, внедрения CSS, добавления ватермарок и многого другого — без изменения кода пользовательских сцен.
 
@@ -12,21 +15,22 @@
 
 ### Базовое использование
 
-Импортируйте `createTailwindJitPlugin` из subpath `browser-tsx-sandbox/plugins` и передайте его в `config.plugins`.
+Импортируйте `createTailwindPlugin` из subpath `browser-tsx-sandbox/plugins` и передайте его в `config.plugins`. Компонент должен объявить `import "virtual:tailwind.css"` — плагин перехватит его через `onResolve`/`onLoad` и инжектит `<style data-tailwind-jit>` со scoped CSS.
 
 > ⚠️ **Важно:** всегда инициализируйте плагин через `useMemo` — иначе новый экземпляр будет пересоздаваться на каждом рендере и триггерить повторные компиляции.
 
 ```tsx
 import React, { useMemo } from 'react';
 import { PlayerSandbox } from 'browser-tsx-sandbox/player';
-import { createTailwindJitPlugin } from 'browser-tsx-sandbox/plugins';
+import { createTailwindPlugin } from 'browser-tsx-sandbox/plugins';
 
 export function TailwindEditor() {
   // 1. Инициализируем плагин один раз
-  const plugins = useMemo(() => [createTailwindJitPlugin()], []);
+  const plugins = useMemo(() => [createTailwindPlugin()], []);
 
   const code = `
     import React from 'react';
+    import 'virtual:tailwind.css';
     import { AbsoluteFill } from 'remotion';
 
     export default function Scene() {
@@ -55,19 +59,13 @@ export function TailwindEditor() {
 
 ### Изоляция стилей (Scoping)
 
-`createTailwindJitPlugin` изолирует сгенерированные стили. Для каждого файла он собирает список классов (`collectTailwindClasses` — собирает даже классы, собранные из шаблонных строк), компилирует из них CSS и оборачивает экспортируемый компонент в `TailwindJitWrapper`:
+`createTailwindPlugin` изолирует сгенерированные стили. Кандидаты собираются из строковых токенов всех файлов VFS токенным сканером (`extractClassNamesFromSource`), CSS компилируется движком Tailwind v4 и скоупится классом-областью (например `__tsx_tw-1a2b3c`), поэтому **стили видео не ломают вёрстку сайта**, а стили сайта не просачиваются внутрь анимации. Собранный CSS кэшируется (LRU), так что при HMR/редактировании перекомпилируются только реально изменившиеся связки.
 
-```
-export default function Scene → <div class="__tsx_tw-<hash>">
-                                ├ <style>{scopedCss}</style>
-                                └ <Scene />
-```
-
-Уникальный класс-область (например `__tsx_tw-1a2b3c`) применяется к обёртке, поэтому **стили видео не ломают вёрстку сайта**, а стили сайта не просачиваются внутрь анимации. Собранный CSS кэшируется (LRU), так что при HMR/редактировании перекомпилируются только реально изменившиеся файлы.
+В отличие от старого подхода, компонент **не оборачивается** в `TailwindJitWrapper`: `<style>` инжектится один раз в `document.head`, а JSX-код сцены остаётся нетронутым.
 
 ### Кастомизация темы (Tailwind v4)
 
-Опции `createTailwindJitPlugin`:
+Опции `createTailwindPlugin`:
 
 | Опция | Тип | По умолчанию |
 |---|---|---|
@@ -81,7 +79,7 @@ export default function Scene → <div class="__tsx_tw-<hash>">
 
 ```tsx
 const plugins = useMemo(() => [
-  createTailwindJitPlugin({
+  createTailwindPlugin({
     css: `
       @theme {
         --color-brand-red: #ff4b4b;
@@ -99,7 +97,47 @@ const plugins = useMemo(() => [
 
 ## Создание собственных плагинов
 
-Плагин — это объект, реализующий `PipelinePlugin`:
+### SandboxPlugin (onResolve / onLoad, стиль esbuild)
+
+```typescript
+interface SandboxPlugin {
+  name: string;
+  setup(build: PluginBuild): void | Promise<void>;
+}
+
+interface PluginBuild {
+  onResolve(
+    options: { filter: RegExp; namespace?: string },
+    callback: (args: OnResolveArgs) => OnResolveResult | null,
+  ): void;
+  onLoad(
+    options: { filter: RegExp; namespace?: string },
+    callback: (args: OnLoadArgs) => OnLoadResult | null,
+  ): void;
+}
+```
+
+Пример — виртуальный CSS-модуль `import "virtual:brand.css"`:
+
+```tsx
+const brandCssPlugin: SandboxPlugin = {
+  name: 'brand-css',
+  setup(build) {
+    build.onResolve({ filter: /^virtual:brand\.css$/ }, (args) => ({
+      path: args.path,
+      namespace: 'brand-virtual',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'brand-virtual' }, () => ({
+      loader: 'css',
+      contents: ':root { --brand: #ff4b4b; }',
+    }));
+  },
+};
+```
+
+### PipelinePlugin (beforeCompile / afterCompile)
+
+Классические плагины — объекты, реализующие `PipelinePlugin`:
 
 ```typescript
 interface PipelinePlugin {
@@ -173,8 +211,6 @@ const watermarkPlugin: PipelinePlugin = {
 };
 ```
 
-> 💡 Тот же приём использует встроенный Tailwind-плагин: `afterCompile` оборачивает `exports.default` в `TailwindJitWrapper`. Если ваш плагин и Tailwind в одном массиве — порядок имеет значение: обёртки применятся в том же порядке, в котором стоят плагины.
-
 ---
 
 ## Порядок выполнения
@@ -183,6 +219,6 @@ const watermarkPlugin: PipelinePlugin = {
 2. `plugin1.beforeCompile` → `plugin2.beforeCompile` → … (в порядке массива).
 3. Внутренняя компиляция Sucrase (TSX → CommonJS).
 4. `plugin1.afterCompile` → `plugin2.afterCompile` → … .
-5. Исполнение в песочнице (runtime).
+5. Разрешение виртуальных импортов (`SandboxPlugin.onResolve`/`onLoad`) и исполнение в песочнице (runtime).
 
 Плагины передаются в `SandboxFacadeOptions.plugins`, `UseLiveSandboxOptions.plugins` и `SandboxConfig.plugins` — то есть работают в любом интерфейсе: `<Sandbox>`, `<PlayerSandbox>` или напрямую в `useLiveSandbox`/`SandboxFacade`.

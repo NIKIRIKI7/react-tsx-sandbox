@@ -1,4 +1,6 @@
 import { VirtualFileSystem } from '../core/types';
+import { JsScanner, TokenType } from './scanner';
+import { resolveVirtualPath } from './path';
 
 export interface ScanResult {
   bareImports: string[];
@@ -6,37 +8,7 @@ export interface ScanResult {
   dynamicImports: string[];
 }
 
-function skipLineComment(code: string, start: number): number {
-  let i = start + 2;
-  while (i < code.length && code[i] !== '\n') i++;
-  return i;
-}
-
-function skipBlockComment(code: string, start: number): number {
-  let i = start + 2;
-  while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++;
-  return Math.min(code.length, i + 2);
-}
-
-function skipString(code: string, start: number): number {
-  const quote = code[start];
-  let i = start + 1;
-  while (i < code.length) {
-    const ch = code[i];
-    if (ch === '\\') {
-      i += 2;
-      continue;
-    }
-    if (ch === quote) return i + 1;
-    i++;
-  }
-  return code.length;
-}
-
-/**
- * Удаляет комментарии, сохраняя строковые литералы. Заменяет комментарии
- * пробелом, чтобы не склеивать токены.
- */
+/** Удаляет комментарии, сохраняя строковые литералы. Заменяет их пробелом. */
 export function stripComments(code: string): string {
   let out = '';
   let i = 0;
@@ -66,8 +38,32 @@ export function stripComments(code: string): string {
   return out;
 }
 
-const STATIC_IMPORT_RE = /(?:import|export)\s+(?:(?:[\w*\s{},$]+)\s+from\s+)?['"]([^'"]+)['"]/g;
-const DYNAMIC_IMPORT_RE = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+function skipLineComment(code: string, start: number): number {
+  let i = start + 2;
+  while (i < code.length && code[i] !== '\n') i++;
+  return i;
+}
+
+function skipBlockComment(code: string, start: number): number {
+  let i = start + 2;
+  while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++;
+  return Math.min(code.length, i + 2);
+}
+
+function skipString(code: string, start: number): number {
+  const quote = code[start];
+  let i = start + 1;
+  while (i < code.length) {
+    const ch = code[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === quote) return i + 1;
+    i++;
+  }
+  return code.length;
+}
 
 function classify(specifier: string, bare: Set<string>, local: Set<string>): void {
   const value = specifier.trim();
@@ -76,36 +72,107 @@ function classify(specifier: string, bare: Set<string>, local: Set<string>): voi
   else bare.add(value);
 }
 
+function unquote(raw: string): string {
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
+    return raw.slice(1, -1);
+  }
+  return raw;
+}
+
 /**
- * Извлекает зависимости: внешние (bare) пакеты, локальные пути VFS
- * и статические динамические импорты. Устойчиво к комментариям.
+ * Анализирует зависимости JS/TSX-файла с помощью токенизатора.
+ *
+ * Точно различает статические импорты, реэкспорты `export ... from`,
+ * динамические `import(...)`, `require(...)` и игнорирует ложные вхождения
+ * слов import/from внутри строк, комментариев, шаблонных литералов и JSX.
  */
 export function scanImports(code: string): ScanResult {
-  const clean = stripComments(code);
+  const scanner = new JsScanner(code);
   const bare = new Set<string>();
   const local = new Set<string>();
   const dynamic = new Set<string>();
 
-  let match: RegExpExecArray | null;
+  let prevTokenVal = '';
+  let token = scanner.nextToken(true);
 
-  STATIC_IMPORT_RE.lastIndex = 0;
-  while ((match = STATIC_IMPORT_RE.exec(clean)) !== null) {
-    classify(match[1], bare, local);
-  }
+  while (token.type !== TokenType.EOF) {
+    if (token.type === TokenType.Keyword || token.type === TokenType.Identifier) {
+      // 1. Статический `import` (выражение, спецификатор или `import('pkg')`).
+      if (token.value === 'import') {
+        const next = scanner.nextToken(false);
 
-  DYNAMIC_IMPORT_RE.lastIndex = 0;
-  while ((match = DYNAMIC_IMPORT_RE.exec(clean)) !== null) {
-    const value = match[1].trim();
-    classify(value, bare, local);
-    if (value.startsWith('.') || value.startsWith('/')) dynamic.add(value);
-    else dynamic.add(value);
+        // Динамический импорт: import('pkg')
+        if (next.type === TokenType.Punctuator && next.value === '(') {
+          const arg = scanner.nextToken(true);
+          if (arg.type === TokenType.StringLiteral) {
+            const specifier = unquote(arg.value).trim();
+            if (specifier) {
+              classify(specifier, bare, local);
+              dynamic.add(specifier);
+            }
+          }
+        }
+        // Сайд-эффект импорт: import 'specifier'
+        else if (next.type === TokenType.StringLiteral) {
+          const specifier = unquote(next.value).trim();
+          if (specifier) classify(specifier, bare, local);
+        }
+        // Обычный импорт / import type: ищем `from 'specifier'`
+        else {
+          scanUntilFrom(scanner, bare, local);
+        }
+      }
+
+      // 2. Экспорт из модуля: export ... from 'specifier'
+      else if (token.type === TokenType.Keyword && token.value === 'export') {
+        scanUntilFrom(scanner, bare, local);
+      }
+
+      // 3. Вызов require('specifier') (не свойство объекта).
+      else if (token.value === 'require' && prevTokenVal !== '.') {
+        const next = scanner.nextToken(false);
+        if (next.type === TokenType.Punctuator && next.value === '(') {
+          const arg = scanner.nextToken(true);
+          if (arg.type === TokenType.StringLiteral) {
+            const specifier = unquote(arg.value).trim();
+            if (specifier) classify(specifier, bare, local);
+          }
+        }
+      }
+    }
+
+    prevTokenVal = token.value;
+    const canBeRegex = token.type === TokenType.Punctuator || token.type === TokenType.Keyword;
+    token = scanner.nextToken(canBeRegex);
   }
 
   return {
-    bareImports: [...bare],
-    localImports: [...local],
-    dynamicImports: [...dynamic],
+    bareImports: Array.from(bare).sort(),
+    localImports: Array.from(local).sort(),
+    dynamicImports: Array.from(dynamic).sort(),
   };
+}
+
+function scanUntilFrom(
+  scanner: JsScanner,
+  bare: Set<string>,
+  local: Set<string>,
+): void {
+  let t = scanner.nextToken(true);
+  while (t.type !== TokenType.EOF && t.value !== ';') {
+    if (t.type === TokenType.Keyword && t.value === 'from') {
+      const specToken = scanner.nextToken(false);
+      if (specToken.type === TokenType.StringLiteral) {
+        const specifier = unquote(specToken.value).trim();
+        if (specifier) classify(specifier, bare, local);
+      }
+      break;
+    }
+    t = scanner.nextToken(true);
+  }
 }
 
 /** Обратно совместимый хелпер: только внешние пакеты. */
@@ -113,48 +180,15 @@ export function extractBareImports(code: string): string[] {
   return scanImports(code).bareImports;
 }
 
-function normalizePath(path: string): string {
-  const parts = path.split('/').filter((part) => part.length > 0 && part !== '.');
-  const stack: string[] = [];
-  for (const part of parts) {
-    if (part === '..') stack.pop();
-    else stack.push(part);
-  }
-  return '/' + stack.join('/');
-}
-
 /**
  * Резолвит относительный/абсолютный путь внутри Virtual File System,
- * подбирая расширения (.tsx/.ts/.jsx/.js/.json).
+ * подбирая расширения (.tsx/.ts/.jsx/.js/.json) и индексные файлы.
+ * Легковесная обёртка над каноническим резолвером `compiler/path`.
  */
 export function resolveVfsPath(
   currentFile: string,
   relativePath: string,
   vfs: VirtualFileSystem,
 ): string | null {
-  const slash = currentFile.lastIndexOf('/');
-  const currentDir = slash > 0 ? currentFile.slice(0, slash) : '';
-  const basePath = relativePath.startsWith('/') ? relativePath : `${currentDir}/${relativePath}`;
-  const normalized = normalizePath(basePath);
-
-  const candidates = [
-    normalized,
-    normalized + '.tsx',
-    normalized + '.ts',
-    normalized + '.jsx',
-    normalized + '.js',
-    normalized + '.json',
-    normalized + '/index.tsx',
-    normalized + '/index.ts',
-    normalized + '/index.jsx',
-    normalized + '/index.js',
-  ];
-
-  for (const candidate of candidates) {
-    if (vfs[candidate] !== undefined) return candidate;
-    const withoutSlash = candidate.replace(/^\//, '');
-    if (vfs[withoutSlash] !== undefined) return withoutSlash;
-  }
-
-  return null;
+  return resolveVirtualPath(currentFile, relativePath, vfs);
 }

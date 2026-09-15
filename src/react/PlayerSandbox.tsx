@@ -48,11 +48,8 @@ export interface PlayerSandboxConfig extends SandboxConfig {
   autoPlay?: boolean;
   inputProps?: Record<string, unknown>;
   playerProps?: Partial<PlayerPropsWithoutZod<Record<string, unknown>>>;
-  /** Сохранять текущий кадр при перекомпиляции (по умолчанию true). */
   smartFrameRetention?: boolean;
-  /** Таймаут `delayRender` в ms (по умолчанию 4000). */
   delayRenderTimeoutMs?: number;
-  /** Оверлей безопасных зон (TikTok/Reels/Shorts, TV-safe, rule-of-thirds). */
   safeZone?: SafeZonePreset | SafeZonePreset[];
   /** Зум и панорамирование холста. */
   canvasControls?: CanvasControlsConfig;
@@ -76,7 +73,6 @@ export interface PlayerSandboxRef {
   getActiveDelayHandles: () => string[];
   getRemotionPlayerRef: () => PlayerRef | null;
   resetZoomPan: () => void;
-  /** Программный экспорт видео (MP4/WebM). */
   exportVideo: (options?: ExportVideoOptions) => Promise<Blob | null>;
   abortExport: () => void;
   getExportState: () => ExportState;
@@ -136,15 +132,51 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       config,
     );
 
-    // Актуальная конфигурация для использования внутри мемоизированных замыканий
+    useEffect(() => {
+      if (error) {
+        logger.error('Ошибка компиляции сцены', {
+          message: error.message,
+          phase: (error as any).errorPhase,
+          source: typeof input === 'string' ? '(string)' : Object.keys(input),
+        });
+      }
+      if (runtimeError) {
+        logger.error('Ошибка рендера сцены', {
+          message: runtimeError.message,
+          stack: (runtimeError as any).stack,
+        });
+      }
+    }, [error, runtimeError]);
+
+    useEffect(() => {
+      logger.debug('Параметры сцены (resolved)', {
+        durationInFrames: config.durationInFrames ?? metadata?.durationInFrames,
+        fps: config.fps ?? metadata?.fps,
+        width: config.width ?? metadata?.width,
+        height: config.height ?? metadata?.height,
+        metadataDuration: metadata?.durationInFrames,
+        metadataFps: metadata?.fps,
+        metadataWidth: metadata?.width,
+        metadataHeight: metadata?.height,
+      });
+    }, [metadata, config.durationInFrames, config.fps, config.width, config.height]);
+
+    useEffect(() => {
+      if (!isCompiling) {
+        logger.debug(
+          Component ? 'Сцена скомпилирована' : 'Сцена не собрана (нет компонента)',
+          { hasComponent: Boolean(Component), isCompiling },
+        );
+      }
+    }, [isCompiling, Component]);
+
     const configRef = useRef(config);
     configRef.current = config;
 
-    // Параметры сцены: явные пропсы конфигурации переопределяют метаданные из TSX/JSON
-    const resolvedDurationInFrames = config.durationInFrames ?? metadata?.durationInFrames ?? 300;
-    const resolvedFps = config.fps ?? metadata?.fps ?? 30;
-    const resolvedWidth = config.width ?? metadata?.width ?? 1920;
-    const resolvedHeight = config.height ?? metadata?.height ?? 1080;
+    const resolvedDurationInFrames = metadata?.durationInFrames ?? config.durationInFrames ?? 300;
+    const resolvedFps = metadata?.fps ?? config.fps ?? 30;
+    const resolvedWidth = metadata?.width ?? config.width ?? 1920;
+    const resolvedHeight = metadata?.height ?? config.height ?? 1080;
     const resolvedInputProps: Record<string, unknown> = useMemo(
       () => ({
         ...(metadata?.defaultProps ?? {}),
@@ -153,7 +185,6 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
       [metadata?.defaultProps, config.inputProps],
     );
 
-    // Мемоизируем SafeComponent, чтобы избежать ре-маунта <Player> на каждом обновлении состояния (time/play)
     const SafeComponent: React.FC<Record<string, unknown>> = useMemo(() => {
       if (!Component) return () => null;
       const Wrapped: React.FC<Record<string, unknown>> = (props) => (
@@ -171,7 +202,7 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
             )
           }
         >
-          <div data-remotion-canvas="true" style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+          <div data-remotion-canvas="true" className="__tsx_tw" style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
             <Component {...resolvedInputProps} {...props} />
           </div>
         </SandboxErrorBoundary>
@@ -326,6 +357,9 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
             frames: resolvedDurationInFrames,
           });
 
+          // Останавливаем плеер перед экспортом, чтобы он не мешал захвату кадров
+          pause();
+
           const blob = await exportBrowserVideo({
             container,
             durationInFrames: resolvedDurationInFrames,
@@ -337,6 +371,8 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
             quality,
             bitrate: options.bitrate,
             signal: controller.signal,
+            // Снижаем задержку до минимума, так как теперь есть жесткое ожидание <video> внутри
+            frameDelayMs: 0,
             onProgress: (next) => {
               setExportState({
                 isExporting: true,
@@ -367,7 +403,7 @@ export const PlayerSandboxComponent = forwardRef<PlayerSandboxRef, PlayerSandbox
           abortExportRef.current = null;
         }
       },
-      [seekTo, resolvedWidth, resolvedHeight, resolvedFps, resolvedDurationInFrames],
+      [seekTo, pause, resolvedWidth, resolvedHeight, resolvedFps, resolvedDurationInFrames],
     );
 
     useImperativeHandle(

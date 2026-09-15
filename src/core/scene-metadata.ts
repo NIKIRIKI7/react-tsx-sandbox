@@ -12,6 +12,51 @@ export interface SceneMetadata {
 }
 
 /**
+ * Скобко-осознанное извлечение тела объектного литерала конфига.
+ *
+ * Ищет `name = {` и затем сканирует посимвольно, отслеживая вложенность `{}`
+ * и пропуская строковые/шаблонные литералы. В отличие от жадной регулярки
+ * `\{([^}]+)\}`, корректно обрабатывает вложенные объекты:
+ * `compositionConfig = { defaultProps: { user: { name: 'Alex' } } }`.
+ */
+function extractConfigObjectBody(raw: string, name: string): string | null {
+  const headRe = new RegExp(`\\b${name}\\s*=\\s*\\{`);
+  const head = headRe.exec(raw);
+  if (!head) return null;
+
+  const openIndex = head.index + head[0].lastIndexOf('{');
+  let depth = 0;
+  let quote: string | null = null;
+  let i = openIndex;
+
+  for (; i < raw.length; i++) {
+    const ch = raw[i];
+
+    if (quote) {
+      if (ch === '\\') {
+        i++;
+      } else if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+    } else if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return raw.slice(openIndex + 1, i);
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Автоматически извлекает параметры видео (хронометраж, FPS, размеры и пропсы)
  * из TSX-экспортов, статики компонента или JSON-конфигурации.
  *
@@ -199,9 +244,13 @@ export function extractSceneMetadata(
 
     // ── 4. Fallback: регулярные выражения по тексту TSX ───────────────
 
-    const configMatch = raw.match(/(?:compositionConfig|sceneConfig)\s*=\s*\{([^}]+)\}/);
-    if (configMatch) {
-      const body = configMatch[1];
+    let body: string | null = null;
+    for (const configName of ['compositionConfig', 'sceneConfig'] as const) {
+      body = extractConfigObjectBody(raw, configName);
+      if (body) break;
+    }
+
+    if (body) {
       const dur = body.match(/durationInFrames\s*:\s*(\d+)/);
       if (dur && metadata.durationInFrames === undefined) metadata.durationInFrames = Number(dur[1]);
       const fpsM = body.match(/fps\s*:\s*(\d+)/);

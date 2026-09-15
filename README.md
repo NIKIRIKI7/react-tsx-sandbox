@@ -354,7 +354,7 @@ import confetti from 'canvas-confetti';
 | `modules` | пре-зарегистрированные модули (`import` без CDN) | — |
 | `assets` | карта `имя → URL` для `staticFile()` | — |
 | `mediaResolver` | `(src) => string` — перехват `src` медиа без правки кода сцены | — |
-| `plugins` | `PipelinePlugin[]` (до/после компиляции) | `[]` |
+| `plugins` | `(PipelinePlugin \| SandboxPlugin)[]` (до/после компиляции + onResolve/onLoad) | `[]` |
 | `durationInFrames` | длина композиции | `300` |
 | `fps` | частота кадров | `30` |
 | `width` / `height` | разрешение композиции | `1920` / `1080` |
@@ -761,9 +761,9 @@ function ExportControls() {
 
 ```tsx
 import { Sandbox } from 'browser-tsx-sandbox';
-import { createTailwindJitPlugin } from 'browser-tsx-sandbox/plugins';
+import { createTailwindPlugin } from 'browser-tsx-sandbox/plugins';
 
-<Sandbox config={{ code: counterWidgetTSX, plugins: [createTailwindJitPlugin()] }} />
+<Sandbox config={{ code: counterWidgetTSX, plugins: [createTailwindPlugin()] }} />
 ```
 
 ### ⚙️ `SandboxFacade` — песочница без React-UI
@@ -775,7 +775,7 @@ import React from 'react';
 import { SandboxFacade } from 'browser-tsx-sandbox';
 
 const facade = new SandboxFacade({ react: React } /* реестр модулей */, {
-  plugins: [],            // опционально: PipelinePlugin[]
+  plugins: [],            // опционально: (PipelinePlugin | SandboxPlugin)[]
   compiler: undefined,    // опционально: WorkerCompilerAdapter
   maxIterations: 500_000,
 });
@@ -821,7 +821,7 @@ console.log(result.component, result.exports?.message, result.executionTimeMs);
 - **Безопасность.** Затенение глобалов (`window`, `document`, `fetch`…) — защита от случайного и вредоносного доступа, но исполнение идёт в том же JS-realm: это не изоляция уровня ОС. Не запускайте непроверенный код без собственного sandbox-контура.
 - **Сеть.** NPM-импорты и часть e2e требуют доступа к CDN. В Node нативные `https`-импорты не поддерживаются — тесты используют адаптер с `?bundle`.
 - **`takeSnapshot`** для canvas-сцен (WebGL/2D) даёт настоящий PNG/JPEG; для чисто DOM-сцен браузер может пометить canvas как *tainted* и вернётся SVG data-URL.
-- **Браузерный рендер в файл** — экспорт MP4 (H.264) и WebM (VP8/VP9) через WebCodecs + встроенные ISO-BMFF/EBML муксеры (`ExportButton`, `exportBrowserVideo`, `PlayerSandbox` `exportVideo`). Захват кадра идёт в **разрешении композиции** (без UI-масштаба) — видео не размывается; пресеты качества `low`/`medium`/`high`. Полный MKV/AAC-рендер в файл — только офлайн (Node + Chrome).
+- **Браузерный рендер в файл** — экспорт MP4 (H.264) и WebM (VP8/VP9) через WebCodecs + мультиплексирование `mediabunny` (`ExportButton`, `exportBrowserVideo`, `PlayerSandbox` `exportVideo`). Захват кадра идёт в **разрешении композиции** (без UI-масштаба) — видео не размывается; пресеты качества `low`/`medium`/`high`. Полный MKV/AAC-рендер в файл — только офлайн (Node + Chrome).
 
 ---
 

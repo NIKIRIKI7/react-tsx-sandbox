@@ -1,7 +1,7 @@
 import { ModuleRegistry, SandboxGlobals, VirtualFileSystem, DEFAULT_ENTRY } from '../core/types';
 import { SecurityError } from '../core/errors';
 import { resolveVfsPath } from '../compiler/analyzer';
-import { getShadowedGlobals } from './scope';
+import { createSandboxMembrane, getShadowedGlobals } from './scope';
 
 export interface EvaluatorContext {
   registry: ModuleRegistry;
@@ -53,8 +53,9 @@ export function executeComponent(
   if (!React) throw new Error("Модуль 'react' обязателен для компиляции TSX.");
 
   const { forbiddenKeys, shadowValues } = getShadowedGlobals();
-  const globalKeys = Object.keys(globals);
-  const globalValues = Object.values(globals);
+  const protectedGlobals = createSandboxMembrane(globals);
+  const globalKeys = Object.keys(protectedGlobals);
+  const globalValues = Object.values(protectedGlobals);
   const moduleCache: Record<string, Record<string, any>> = {};
 
   function evaluateFile(filePath: string, code: string): Record<string, any> {
@@ -68,6 +69,11 @@ export function executeComponent(
     const scopedRequire = (moduleName: string) => {
       if (registry[moduleName] !== undefined) return registry[moduleName];
 
+      // Виртуальные модули плагинов (onResolve/onLoad): virtual:tailwind.css и т.п.
+      if (compiledVfs[moduleName] !== undefined) {
+        return evaluateFile(moduleName, compiledVfs[moduleName]);
+      }
+
       if (moduleName.startsWith('.') || moduleName.startsWith('/')) {
         const resolved = resolveVfsPath(filePath, moduleName, compiledVfs);
         if (resolved && compiledVfs[resolved] !== undefined) {
@@ -80,16 +86,18 @@ export function executeComponent(
     };
 
     try {
+      const moduleObj = { exports: moduleExports };
       const fn = new Function(
         'require',
         'exports',
+        'module',
         'React',
         ...globalKeys,
         ...forbiddenKeys,
         code,
       );
 
-      fn(scopedRequire, moduleExports, React, ...globalValues, ...shadowValues);
+      fn(scopedRequire, moduleExports, moduleObj, React, ...globalValues, ...shadowValues);
     } catch (error) {
       if (
         error instanceof SecurityError ||

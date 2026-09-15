@@ -5,8 +5,9 @@ import { Camera, Download, Pause, Play, Sparkles, Volume2, VolumeX } from 'lucid
 import * as Lucide from 'lucide-react';
 import { PlayerSandbox } from '../src/player';
 import type { PlayerSandboxRef } from '../src/player';
-import { createTailwindJitPlugin } from '../src/plugins/tailwind-plugin';
+import { createTailwindPlugin } from '../src/plugins/tailwind-plugin';
 import type { BrowserExportCodec, ExportQuality } from '../src/export/browser-export';
+import { supportsBrowserExport } from '../src/export/browser-export';
 import { configureLogger } from '../src/core/logger';
 import './styles.css';
 
@@ -56,6 +57,8 @@ export function StudioExample() {
   const [status, setStatus] = useState('ready');
   const [quality, setQuality] = useState<ExportQuality>('high');
   const [codec, setCodec] = useState<BrowserExportCodec>('avc');
+  const [draftCode, setDraftCode] = useState(STUDIO_CODE);
+  const [liveCode, setLiveCode] = useState(STUDIO_CODE);
 
   const toViteFsPath = (src: string): string => {
     const clean = src.replace(/^file:\/\/\//i, '');
@@ -65,7 +68,7 @@ export function StudioExample() {
     return src;
   };
 
-  const plugins = useMemo(() => [createTailwindJitPlugin()], []);
+  const plugins = useMemo(() => [createTailwindPlugin()], []);
 
   const modules = useMemo(() => ({ remotion: Remotion, 'lucide-react': Lucide }), []);
 
@@ -86,8 +89,9 @@ export function StudioExample() {
   const programmaticExport = async () => {
     try {
       setStatus('exporting…');
+      const filename = `studio-export.${codec === 'avc' ? 'mp4' : 'webm'}`;
       const blob = await playerRef.current?.exportVideo({
-        filename: `studio-export.${codec === 'avc' ? 'mp4' : 'webm'}`,
+        filename,
         codec,
         quality,
         onProgress: (next) => setStatus(`${Math.round(next.progress * 100)}% ${next.phase}`),
@@ -100,6 +104,17 @@ export function StudioExample() {
     } catch (error) {
       setStatus(`export failed: ${(error as Error).message}`);
     }
+  };
+
+  const compileDraft = () => {
+    setLiveCode(draftCode);
+    setStatus('compiled');
+  };
+
+  const resetCode = () => {
+    setDraftCode(STUDIO_CODE);
+    setLiveCode(STUDIO_CODE);
+    setStatus('reset to default');
   };
 
   return (
@@ -117,19 +132,48 @@ export function StudioExample() {
         </a>
       </header>
 
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Свой код
+          </h2>
+          <button
+            type="button"
+            onClick={compileDraft}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-400 transition hover:bg-emerald-900/50"
+          >
+            <Play size={16} />
+            Compile &amp; Preview
+          </button>
+          <button
+            type="button"
+            onClick={resetCode}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-700"
+          >
+            Сбросить
+          </button>
+        </div>
+        <textarea
+          value={draftCode}
+          onChange={(event) => setDraftCode(event.target.value)}
+          spellCheck={false}
+          aria-label="Scene code"
+          className="mt-2 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-200"
+          rows={12}
+        />
+      </section>
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
           <PlayerSandbox.Root
             ref={playerRef}
             config={{
-              code: STUDIO_CODE,
+              code: liveCode,
               modules: modules,
               plugins,
               mediaResolver: toViteFsPath,
-              durationInFrames: 150,
-              fps: 30,
-              width: 1080,
-              height: 1920,
+              // Размеры и хронометраж берутся из метаданных сцены (compositionConfig),
+              // если они есть; иначе используются дефолты плеера.
               controls: false,
               loop: true,
               smartFrameRetention: true,
@@ -245,6 +289,21 @@ export function StudioExample() {
               >
                 <Sparkles size={16} />
                 Export (programmatic)
+              </button>
+
+              <button
+                type="button"
+                onClick={programmaticExport}
+                disabled={!supportsBrowserExport()}
+                title={
+                  supportsBrowserExport()
+                    ? 'Экспортировать и скачать анимацию (WebCodecs)'
+                    : 'WebCodecs недоступен в этом браузере'
+                }
+                className="inline-flex items-center gap-2 rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-3 py-2 text-sm text-cyan-300 transition hover:bg-cyan-900/50 disabled:opacity-40"
+              >
+                <Download size={16} />
+                Скачать анимацию
               </button>
 
               <button
